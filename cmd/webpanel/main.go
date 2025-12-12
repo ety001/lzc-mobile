@@ -7,6 +7,8 @@ import (
 	"github.com/ety001/lzc-mobile/internal/ami"
 	"github.com/ety001/lzc-mobile/internal/config"
 	"github.com/ety001/lzc-mobile/internal/database"
+	"github.com/ety001/lzc-mobile/internal/sms"
+	"github.com/ety001/lzc-mobile/internal/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -63,12 +65,21 @@ func main() {
 				log.Printf("Error closing AMI connection: %v", err)
 			}
 		}()
+
+		// 初始化短信处理器并注册到 AMI 管理器
+		smsHandler := sms.NewHandler()
+		smsHandler.Register()
+		log.Println("SMS handler initialized and registered")
 	}
 
 	// 初始化 Gin 路由
 	r := gin.Default()
 
-	// TODO: 添加路由和中间件
+	// 设置 API 路由
+	router := web.NewRouter(renderer)
+	router.SetupRoutes(r)
+
+	// TODO: 添加静态文件服务和前端路由
 
 	// 启动服务器
 	log.Printf("Starting web panel on port %s", webPort)
