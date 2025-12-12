@@ -42,6 +42,7 @@ lzc-mobile
 # Frontend build output (if not using embed)
 internal/frontend/dist/
 internal/frontend/node_modules/
+internal/frontend/package-lock.json
 
 # Logs
 *.log
