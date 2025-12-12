@@ -48,7 +48,7 @@ WEB_PORT=8071  # Web 管理端口，默认 8071
 
 ```bash
 # 构建镜像
-docker build -t lzc-mobile .
+docker build -f docker/Dockerfile -t lzc-mobile .
 
 # 运行容器（需要挂载 USB 设备）
 docker run -d \
@@ -78,8 +78,8 @@ docker run -d \
 详细的文档请查看 `docs/` 目录：
 
 - [项目架构规划](docs/plan.md) - 完整的项目架构和设计文档
-- [部署文档](docs/deployment.md) - 详细的部署说明（待编写）
-- [使用说明](docs/usage.md) - 功能使用指南（待编写）
+- [部署文档](docs/deployment.md) - 详细的部署说明
+- [使用说明](docs/usage.md) - 功能使用指南
 
 ## 技术栈
 
@@ -92,7 +92,18 @@ docker run -d \
 
 ## 开发状态
 
-项目正在开发中，当前版本为初始版本。
+项目已完成核心功能开发，当前版本为 v1.0.0。
+
+### 已完成功能
+
+- ✅ 项目初始化和基础架构
+- ✅ 数据库和配置管理
+- ✅ AMI 集成和状态监控
+- ✅ Extension 和 Dongle 管理
+- ✅ 多通道通知系统
+- ✅ Web 管理界面
+- ✅ OIDC 认证系统
+- ✅ Docker 容器化部署
 
 ## 许可证
 
