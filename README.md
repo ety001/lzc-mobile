@@ -96,7 +96,7 @@ docker run -d \
 
 ## 许可证
 
-（待补充）
+本项目采用 [Apache License 2.0](LICENSE) 许可证。
 
 ## 贡献
 
