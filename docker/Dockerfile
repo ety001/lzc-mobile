@@ -1,69 +1,89 @@
-# 使用 Debian 作为基础镜像
-FROM debian:bookworm-slim
+# 阶段一：构建 Go 应用
+FROM golang:alpine3.23 AS go-builder
+
+WORKDIR /build
+
+# 安装必要的构建依赖（CGO 需要，因为使用了 SQLite）
+RUN apk add --no-cache \
+    git \
+    gcc \
+    musl-dev \
+    sqlite-dev
+
+# 复制 go mod 文件
+COPY go.mod go.sum ./
+
+# 下载依赖
+RUN go mod download
+
+# 复制源代码
+COPY . .
+
+# 构建 Go 应用（启用 CGO，在 Alpine 下使用动态链接）
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o bin/webpanel ./cmd/webpanel
+
+# 阶段二：构建前端
+FROM node:20-alpine3.23 AS frontend-builder
+
+WORKDIR /build
+
+# 安装 pnpm
+RUN npm install -g pnpm
+
+# 复制前端 package.json（先复制依赖文件以利用缓存）
+COPY internal/frontend/package.json ./
+
+# 安装依赖（如果存在 pnpm-lock.yaml 会使用它）
+COPY internal/frontend/pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile || pnpm install
+
+# 复制前端源代码
+COPY internal/frontend/ ./
+
+# 构建前端（临时修改输出目录为 ./dist，因为 vite.config.js 配置的是 ../../web/dist）
+RUN sed -i 's|outDir:.*|outDir: "./dist",|' vite.config.js && pnpm build
+
+# 阶段三：最终镜像
+FROM alpine:3.23
 
 # 设置工作目录
 WORKDIR /app
 
-# 安装必要的系统依赖
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    wget \
-    curl \
-    git \
-    supervisor \
+# 启用 community 仓库（chan_dongle 需要）
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.23/community" >> /etc/apk/repositories
+
+# 安装必要的运行时依赖
+RUN apk add --no-cache \
     asterisk \
+    asterisk-chan-dongle \
     asterisk-dev \
-    libusb-1.0-0-dev \
-    libusb-1.0-0 \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+    supervisor \
+    ca-certificates \
+    libusb \
+    sqlite \
+    bash \
+    curl
 
-# 安装 Go
-ENV GO_VERSION=1.25.5
-RUN wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
-    && tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz \
-    && rm go${GO_VERSION}.linux-amd64.tar.gz
+# 从 Go 构建阶段复制二进制文件
+COPY --from=go-builder /build/bin/webpanel /app/bin/webpanel
 
-# 设置 Go 环境变量
-ENV PATH=$PATH:/usr/local/go/bin
-ENV GOPATH=/go
-ENV GOPROXY=https://proxy.golang.org,direct
+# 从前端构建阶段复制构建产物
+COPY --from=frontend-builder /build/dist /app/web/dist
 
-# 安装 Node.js 和 pnpm（用于构建前端）
-ENV NODE_VERSION=20
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g pnpm \
-    && rm -rf /var/lib/apt/lists/*
+# 复制配置文件
+COPY configs/asterisk/ /app/configs/asterisk/
+COPY configs/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# 复制项目文件
-COPY . .
-
-# 构建 Go 应用
-RUN go mod download \
-    && go build -o bin/webpanel ./cmd/webpanel
-
-# 构建前端
-WORKDIR /app/internal/frontend
-RUN pnpm install \
-    && pnpm build
-
-# 回到工作目录
-WORKDIR /app
+# 复制启动脚本
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # 创建必要的目录
 RUN mkdir -p /var/lib/lzc-mobile \
     /etc/asterisk \
     /var/log/asterisk \
     /var/run/asterisk \
-    web/dist
-
-# 复制 Supervisor 配置
-COPY configs/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# 复制启动脚本
-COPY scripts/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+    /var/log/supervisor
 
 # 暴露端口
 # SIP TCP 端口（默认 5060）
