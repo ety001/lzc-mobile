@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ety001/lzc-mobile/internal/ami"
+	"github.com/ety001/lzc-mobile/internal/auth"
 	"github.com/ety001/lzc-mobile/internal/config"
 	"github.com/ety001/lzc-mobile/internal/database"
 	"github.com/ety001/lzc-mobile/internal/sms"
@@ -17,6 +18,11 @@ func main() {
 	webPort := os.Getenv("WEB_PORT")
 	if webPort == "" {
 		webPort = "8071"
+	}
+
+	// 检查 OIDC 配置（启动时强制要求）
+	if _, err := auth.GetOIDCConfig(); err != nil {
+		log.Fatalf("OIDC configuration error: %v", err)
 	}
 
 	// 初始化数据库
