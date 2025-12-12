@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+*.exe
+*.test
+
+# Frontend
+internal/frontend/node_modules/
+internal/frontend/dist/
+internal/frontend/.gitignore
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+.dockerignore
