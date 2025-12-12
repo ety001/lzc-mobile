@@ -4,9 +4,10 @@ import (
 	"log"
 	"os"
 
+	"github.com/ety001/lzc-mobile/internal/ami"
+	"github.com/ety001/lzc-mobile/internal/config"
+	"github.com/ety001/lzc-mobile/internal/database"
 	"github.com/gin-gonic/gin"
-	"github.com/lazycat-cloud/lzc-mobile/internal/config"
-	"github.com/lazycat-cloud/lzc-mobile/internal/database"
 )
 
 func main() {
@@ -47,6 +48,21 @@ func main() {
 		log.Printf("Warning: Failed to render initial config files: %v", err)
 	} else {
 		log.Println("Asterisk configuration files rendered successfully")
+	}
+
+	// 初始化 AMI 管理器
+	amiManager := ami.GetManager()
+	if err := amiManager.Init(); err != nil {
+		log.Printf("Warning: Failed to initialize AMI client: %v", err)
+		log.Println("AMI features will be unavailable")
+	} else {
+		log.Println("AMI client initialized successfully")
+		// 确保程序退出时关闭 AMI 连接
+		defer func() {
+			if err := amiManager.Close(); err != nil {
+				log.Printf("Error closing AMI connection: %v", err)
+			}
+		}()
 	}
 
 	// 初始化 Gin 路由
