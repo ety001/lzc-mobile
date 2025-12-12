@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/lazycat-cloud/lzc-mobile/internal/database"
+	"github.com/ety001/lzc-mobile/internal/database"
 )
 
 // ConfigData 配置模板数据
