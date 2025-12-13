@@ -52,17 +52,26 @@ WORKDIR /app
 # 启用 community 仓库（chan_dongle 需要）
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.23/community" >> /etc/apk/repositories
 
-# 安装必要的运行时依赖
+# 更新 apk 索引
+RUN apk update
+
+# 安装基础依赖（所有架构都支持）
 RUN apk add --no-cache \
-    asterisk \
-    asterisk-chan-dongle \
-    asterisk-dev \
     supervisor \
     ca-certificates \
     libusb \
     sqlite \
     bash \
     curl
+
+# 安装 Asterisk（所有架构都支持）
+RUN apk add --no-cache asterisk asterisk-dev || \
+    (echo "Warning: asterisk may not be available for this architecture" && exit 1)
+
+# 尝试安装 asterisk-chan-dongle（仅在支持的架构上，如 amd64）
+# 如果失败则跳过（ARM64 架构不支持）
+RUN apk add --no-cache asterisk-chan-dongle 2>/dev/null || \
+    echo "Warning: asterisk-chan-dongle not available for this architecture, skipping..."
 
 # 从 Go 构建阶段复制二进制文件
 COPY --from=go-builder /build/bin/webpanel /app/bin/webpanel
