@@ -17,8 +17,6 @@ on:
         type: choice
         options:
           - master
-          - main
-          - develop
 
 env:
   IMAGE_NAME: ety001/lzc-mobile
