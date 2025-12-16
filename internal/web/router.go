@@ -3,6 +3,7 @@ package web
 import (
 	"github.com/ety001/lzc-mobile/internal/auth"
 	"github.com/ety001/lzc-mobile/internal/config"
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,6 +21,13 @@ func NewRouter(renderer *config.Renderer) *Router {
 
 // SetupRoutes 设置所有路由
 func (r *Router) SetupRoutes(engine *gin.Engine) {
+	// 静态文件服务（前端构建产物）
+	// 使用 gin-contrib/static 中间件，参考 turtle/router/router.go 的实现
+	// static.Serve 必须在所有路由之前注册
+	// 第二个参数 true 表示文件不存在时 fallback 到 index.html（SPA 模式）
+	// 使用相对路径 ./web/dist，因为主程序已经将工作目录设置为 /app
+	engine.Use(static.Serve("/", static.LocalFile("./web/dist", true)))
+
 	// 认证路由（不需要认证）
 	authGroup := engine.Group("/auth")
 	{
@@ -75,18 +83,4 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		}
 	}
 
-	// 静态文件服务（前端构建产物）
-	engine.Static("/static", "./web/dist/assets")
-	engine.StaticFile("/favicon.ico", "./web/dist/favicon.ico")
-
-	// SPA 路由：所有非 API 和非静态文件的请求都返回 index.html
-	engine.NoRoute(func(c *gin.Context) {
-		// 如果是 API 请求，返回 404
-		if c.Request.URL.Path[:4] == "/api" {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-		// 否则返回前端页面
-		c.File("./web/dist/index.html")
-	})
 }

@@ -22,6 +22,12 @@ if [ -z "$ASTERISK_AMI_PASSWORD" ]; then
     exit 1
 fi
 
+# 设置默认值（如果未提供）
+export ASTERISK_AMI_HOST="${ASTERISK_AMI_HOST:-localhost}"
+export ASTERISK_AMI_PORT="${ASTERISK_AMI_PORT:-5038}"
+export LAZYCAT_AUTH_OIDC_REDIRECT_URI="${LAZYCAT_AUTH_OIDC_REDIRECT_URI:-/auth/oidc/callback}"
+export LAZYCAT_AUTH_BASE_URL="${LAZYCAT_AUTH_BASE_URL:-http://localhost:8071}"
+
 # 创建必要的目录
 mkdir -p /var/lib/lzc-mobile
 mkdir -p /var/log/asterisk

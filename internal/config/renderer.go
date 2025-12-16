@@ -16,6 +16,8 @@ type ConfigData struct {
 	SIPPort        int
 	RTPStartPort   int
 	RTPEndPort     int
+	AMIUsername    string
+	AMIPassword    string
 	Extensions     []ExtensionData
 	DongleBindings []DongleBindingData
 	Dongles        []DongleData
@@ -89,6 +91,16 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 	data.RTPStartPort = rtpConfig.StartPort
 	data.RTPEndPort = rtpConfig.EndPort
 
+	// 从环境变量加载 AMI 配置
+	data.AMIUsername = os.Getenv("ASTERISK_AMI_USERNAME")
+	if data.AMIUsername == "" {
+		data.AMIUsername = "admin"
+	}
+	data.AMIPassword = os.Getenv("ASTERISK_AMI_PASSWORD")
+	if data.AMIPassword == "" {
+		return nil, fmt.Errorf("ASTERISK_AMI_PASSWORD environment variable is required")
+	}
+
 	// 加载 Extensions
 	var extensions []database.Extension
 	if err := database.DB.Find(&extensions).Error; err != nil {
@@ -145,7 +157,10 @@ func (r *Renderer) RenderTemplate(templateName, outputName string, data interfac
 		return fmt.Errorf("failed to parse template %s: %w", templatePath, err)
 	}
 
-	// 渲染模板
+	// 渲染模板（如果 data 为 nil，则使用空数据）
+	if data == nil {
+		data = struct{}{}
+	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return fmt.Errorf("failed to execute template %s: %w", templateName, err)
@@ -171,6 +186,21 @@ func (r *Renderer) RenderAll() error {
 	data, err := r.LoadConfigData()
 	if err != nil {
 		return err
+	}
+
+	// 渲染 asterisk.conf（主配置文件，不需要模板数据）
+	if err := r.RenderTemplate("asterisk.conf.tpl", "asterisk.conf", nil); err != nil {
+		return fmt.Errorf("failed to render asterisk.conf: %w", err)
+	}
+
+	// 渲染 modules.conf（模块配置文件，不需要模板数据）
+	if err := r.RenderTemplate("modules.conf.tpl", "modules.conf", nil); err != nil {
+		return fmt.Errorf("failed to render modules.conf: %w", err)
+	}
+
+	// 渲染 manager.conf（AMI 配置文件，需要 AMI 用户名和密码）
+	if err := r.RenderTemplate("manager.conf.tpl", "manager.conf", data); err != nil {
+		return fmt.Errorf("failed to render manager.conf: %w", err)
 	}
 
 	// 渲染 sip.conf

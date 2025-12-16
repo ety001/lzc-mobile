@@ -62,6 +62,10 @@ func NewClient() (*Client, error) {
 	}
 
 	// 建立 TCP 连接
+	// 如果 host 是 localhost，强制使用 IPv4 (127.0.0.1) 以避免 IPv6 连接问题
+	if host == "localhost" {
+		host = "127.0.0.1"
+	}
 	address := fmt.Sprintf("%s:%s", host, port)
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
