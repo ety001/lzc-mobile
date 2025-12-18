@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { extensionsAPI } from '../services/extensions';
+import { toast } from 'sonner';
 
 export default function Extensions() {
   const [extensions, setExtensions] = useState([]);
@@ -16,6 +17,15 @@ export default function Extensions() {
     transport: 'tcp',
   });
 
+  const buildPayload = () => {
+    // NOTE: 后端 port 是 int（可选）。这里若为空字符串则不发送该字段，避免 JSON 反序列化错误。
+    const payload = {
+      ...formData,
+      port: formData.port === '' ? undefined : Number(formData.port),
+    };
+    return payload;
+  };
+
   useEffect(() => {
     fetchExtensions();
   }, []);
@@ -26,7 +36,7 @@ export default function Extensions() {
       setExtensions(response.data);
     } catch (error) {
       console.error('Failed to fetch extensions:', error);
-      alert('获取 Extension 列表失败');
+      toast.error('获取 Extension 列表失败');
     } finally {
       setLoading(false);
     }
@@ -35,10 +45,13 @@ export default function Extensions() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const payload = buildPayload();
       if (editing) {
-        await extensionsAPI.update(editing.id, formData);
+        await extensionsAPI.update(editing.id, payload);
+        toast.success('Extension 已更新');
       } else {
-        await extensionsAPI.create(formData);
+        await extensionsAPI.create(payload);
+        toast.success('Extension 已创建');
       }
       setShowModal(false);
       setEditing(null);
@@ -53,7 +66,7 @@ export default function Extensions() {
       });
       fetchExtensions();
     } catch (error) {
-      alert('保存失败: ' + (error.response?.data?.error || error.message));
+      toast.error('保存失败', { description: error.response?.data?.error || error.message });
     }
   };
 
@@ -65,7 +78,7 @@ export default function Extensions() {
       callerid: ext.callerid || '',
       host: ext.host || 'dynamic',
       context: ext.context || 'default',
-      port: ext.port || '',
+      port: ext.port ? String(ext.port) : '',
       transport: ext.transport || 'tcp',
     });
     setShowModal(true);
@@ -77,9 +90,10 @@ export default function Extensions() {
     }
     try {
       await extensionsAPI.delete(id);
+      toast.success('Extension 已删除');
       fetchExtensions();
     } catch (error) {
-      alert('删除失败: ' + (error.response?.data?.error || error.message));
+      toast.error('删除失败', { description: error.response?.data?.error || error.message });
     }
   };
 
@@ -161,7 +175,7 @@ export default function Extensions() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Secret</label>
                   <input
-                    type="text"
+                    type="password"
                     required
                     value={formData.secret}
                     onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
@@ -192,6 +206,19 @@ export default function Extensions() {
                     type="text"
                     value={formData.context}
                     onChange={(e) => setFormData({ ...formData, context: e.target.value })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Port（可选）</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={65535}
+                    placeholder="留空则不设置"
+                    value={formData.port}
+                    onChange={(e) => setFormData({ ...formData, port: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
                   />
                 </div>

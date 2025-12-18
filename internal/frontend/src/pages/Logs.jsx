@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { logsAPI } from '../services/logs';
+import { toast } from 'sonner';
 
 export default function Logs() {
   const [logs, setLogs] = useState([]);
@@ -29,7 +30,7 @@ export default function Logs() {
       setLogs(response.data.lines || []);
     } catch (error) {
       console.error('Failed to fetch logs:', error);
-      alert('获取日志失败');
+      toast.error('获取日志失败');
     } finally {
       setLoading(false);
     }

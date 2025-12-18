@@ -1,6 +1,7 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { systemAPI } from '../services/system';
 import { useEffect, useState } from 'react';
+import { Toaster } from 'sonner';
 
 function StatusIndicator({ status }) {
   const colors = {
@@ -27,7 +28,7 @@ export default function Layout() {
       try {
         const response = await systemAPI.getStatus();
         setStatus(response.data.status);
-      } catch (error) {
+      } catch {
         setStatus('error');
       }
     };
@@ -48,6 +49,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster richColors position="top-right" />
       {/* 导航栏 */}
       <nav className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

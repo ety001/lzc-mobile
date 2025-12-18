@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { systemAPI } from '../services/system';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const [status, setStatus] = useState(null);
@@ -28,10 +29,10 @@ export default function Dashboard() {
     setReloading(true);
     try {
       await systemAPI.reload();
-      alert('Asterisk 配置已重新加载');
+      toast.success('Asterisk 配置已重新加载');
       fetchStatus();
     } catch (error) {
-      alert('重新加载失败: ' + error.message);
+      toast.error('重新加载失败', { description: error.message });
     } finally {
       setReloading(false);
     }
@@ -44,10 +45,10 @@ export default function Dashboard() {
     setRestarting(true);
     try {
       await systemAPI.restart();
-      alert('Asterisk 重启已启动');
+      toast.success('Asterisk 重启已启动');
       fetchStatus();
     } catch (error) {
-      alert('重启失败: ' + error.message);
+      toast.error('重启失败', { description: error.message });
     } finally {
       setRestarting(false);
     }

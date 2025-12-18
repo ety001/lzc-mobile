@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { notificationsAPI } from '../services/notifications';
+import { toast } from 'sonner';
 
 const CHANNELS = [
   { value: 'smtp', label: 'SMTP (邮件)' },
@@ -39,7 +40,7 @@ export default function Notifications() {
       setConfigs(response.data);
     } catch (error) {
       console.error('Failed to fetch configs:', error);
-      alert('获取通知配置失败');
+      toast.error('获取通知配置失败');
     } finally {
       setLoading(false);
     }
@@ -72,9 +73,9 @@ export default function Notifications() {
       await notificationsAPI.update(editing, formData);
       setEditing(null);
       fetchConfigs();
-      alert('配置保存成功');
+      toast.success('配置保存成功');
     } catch (error) {
-      alert('保存失败: ' + (error.response?.data?.error || error.message));
+      toast.error('保存失败', { description: error.response?.data?.error || error.message });
     }
   };
 

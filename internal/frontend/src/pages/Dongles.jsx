@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { extensionsAPI } from '../services/extensions';
 import { donglesAPI } from '../services/dongles';
+import { toast } from 'sonner';
 
 export default function Dongles() {
   const [bindings, setBindings] = useState([]);
@@ -31,7 +32,7 @@ export default function Dongles() {
       setExtensions(extensionsRes.data);
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      alert('获取数据失败');
+      toast.error('获取数据失败');
     } finally {
       setLoading(false);
     }
@@ -42,14 +43,16 @@ export default function Dongles() {
     try {
       if (editing) {
         await donglesAPI.update(editing.id, formData);
+        toast.success('绑定已更新');
       } else {
         await donglesAPI.create(formData);
+        toast.success('绑定已创建');
       }
       setShowModal(false);
       setEditing(null);
       fetchData();
     } catch (error) {
-      alert('保存失败: ' + (error.response?.data?.error || error.message));
+      toast.error('保存失败', { description: error.response?.data?.error || error.message });
     }
   };
 
@@ -57,11 +60,11 @@ export default function Dongles() {
     e.preventDefault();
     try {
       await donglesAPI.sendSMS(showSMSModal, smsData);
-      alert('短信发送成功');
+      toast.success('短信发送成功');
       setShowSMSModal(null);
       setSmsData({ number: '', message: '' });
     } catch (error) {
-      alert('发送失败: ' + (error.response?.data?.error || error.message));
+      toast.error('发送失败', { description: error.response?.data?.error || error.message });
     }
   };
 
@@ -125,9 +128,10 @@ export default function Dongles() {
                       if (!confirm('确定要删除这个绑定吗？')) return;
                       try {
                         await donglesAPI.delete(binding.id);
+                        toast.success('绑定已删除');
                         fetchData();
                       } catch (error) {
-                        alert('删除失败: ' + (error.response?.data?.error || error.message));
+                        toast.error('删除失败', { description: error.response?.data?.error || error.message });
                       }
                     }}
                     className="text-red-600 hover:text-red-900"
