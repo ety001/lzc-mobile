@@ -1,27 +1,27 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { systemAPI } from '../services/system';
-import { useEffect, useState } from 'react';
-import { Toaster } from 'sonner';
+import { Outlet, Link, useLocation } from "react-router-dom";
+import { systemAPI } from "../services/system";
+import { useEffect, useState } from "react";
+import { Toaster } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 function StatusIndicator({ status }) {
-  const colors = {
-    normal: 'bg-green-500',
-    restarting: 'bg-yellow-500',
-    error: 'bg-red-500',
-    unknown: 'bg-gray-500',
+  const config = {
+    normal: { label: "normal", className: "bg-emerald-600 text-white hover:bg-emerald-600" },
+    restarting: { label: "restarting", className: "bg-amber-500 text-black hover:bg-amber-500" },
+    error: { label: "error", className: "bg-destructive text-destructive-foreground hover:bg-destructive" },
+    unknown: { label: "unknown", className: "bg-muted text-foreground hover:bg-muted" },
   };
 
-  return (
-    <div className="flex items-center gap-2">
-      <div className={`w-3 h-3 rounded-full ${colors[status] || colors.unknown}`} />
-      <span className="text-sm text-gray-600 capitalize">{status}</span>
-    </div>
-  );
+  const current = config[status] || config.unknown;
+  return <Badge className={current.className}>{current.label}</Badge>;
 }
 
 export default function Layout() {
   const location = useLocation();
-  const [status, setStatus] = useState('unknown');
+  const [status, setStatus] = useState("unknown");
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -29,7 +29,7 @@ export default function Layout() {
         const response = await systemAPI.getStatus();
         setStatus(response.data.status);
       } catch {
-        setStatus('error');
+        setStatus("error");
       }
     };
 
@@ -40,49 +40,47 @@ export default function Layout() {
   }, []);
 
   const navItems = [
-    { path: '/', label: '仪表盘' },
-    { path: '/extensions', label: 'Extension 管理' },
-    { path: '/dongles', label: 'Dongle 管理' },
-    { path: '/notifications', label: '通知配置' },
-    { path: '/logs', label: '日志' },
+    { path: "/", label: "仪表盘" },
+    { path: "/extensions", label: "Extension" },
+    { path: "/dongles", label: "Dongle" },
+    { path: "/notifications", label: "通知" },
+    { path: "/logs", label: "日志" },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <Toaster richColors position="top-right" />
-      {/* 导航栏 */}
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-gray-900">懒猫通信</h1>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                {navItems.map((item) => (
-                  <Link
+      <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
+        <div className="container mx-auto flex h-14 items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <Link to="/" className="font-semibold tracking-tight">
+              懒猫通信
+            </Link>
+            <Separator orientation="vertical" className="h-6" />
+            <nav className="hidden md:flex items-center gap-1">
+              {navItems.map((item) => {
+                const active = location.pathname === item.path;
+                return (
+                  <Button
                     key={item.path}
-                    to={item.path}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                      location.pathname === item.path
-                        ? 'border-blue-500 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                    }`}
+                    asChild
+                    variant={active ? "secondary" : "ghost"}
+                    size="sm"
                   >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center">
-              <StatusIndicator status={status} />
-            </div>
+                    <Link to={item.path}>{item.label}</Link>
+                  </Button>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <StatusIndicator status={status} />
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* 主内容 */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="container mx-auto px-4 py-6">
         <Outlet />
       </main>
     </div>

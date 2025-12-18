@@ -1,6 +1,12 @@
-import { useEffect, useState, useRef } from 'react';
-import { logsAPI } from '../services/logs';
-import { toast } from 'sonner';
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Play, Square, RefreshCw } from "lucide-react";
+
+import { logsAPI } from "../services/logs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Logs() {
   const [logs, setLogs] = useState([]);
@@ -64,50 +70,69 @@ export default function Logs() {
   };
 
   if (loading) {
-    return <div className="text-center py-12">加载中...</div>;
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-32" />
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-32" />
+          </div>
+        </div>
+        <Skeleton className="h-[600px] w-full" />
+      </div>
+    );
   }
 
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">日志查看</h2>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">日志查看</h2>
+          <p className="text-sm text-muted-foreground">支持最近日志拉取与实时 SSE 流。</p>
+        </div>
+
         <div className="flex gap-2">
-          <button
-            onClick={fetchLogs}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
+          <Button variant="secondary" onClick={fetchLogs}>
+            <RefreshCw />
             刷新
-          </button>
+          </Button>
           {!streaming ? (
-            <button
-              onClick={startStreaming}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-            >
+            <Button onClick={startStreaming}>
+              <Play />
               开始实时流
-            </button>
+            </Button>
           ) : (
-            <button
-              onClick={stopStreaming}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-            >
+            <Button variant="destructive" onClick={stopStreaming}>
+              <Square />
               停止实时流
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
-      <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg h-[600px] overflow-y-auto">
-        {logs.length === 0 ? (
-          <div className="text-gray-500">暂无日志</div>
-        ) : (
-          logs.map((log, index) => (
-            <div key={index} className="mb-1">
-              {log}
+      <Card>
+        <CardHeader>
+          <CardTitle>日志</CardTitle>
+          <CardDescription>{streaming ? "实时流已开启（最多保留最近 100 行）" : "显示最近 100 行"}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[600px] rounded-md border bg-black text-green-300">
+            <div className="p-4 font-mono text-xs leading-relaxed">
+              {logs.length === 0 ? (
+                <div className="text-muted-foreground">暂无日志</div>
+              ) : (
+                logs.map((log, index) => (
+                  <div key={index} className="whitespace-pre-wrap break-words">
+                    {log}
+                  </div>
+                ))
+              )}
+              <div ref={logEndRef} />
             </div>
-          ))
-        )}
-        <div ref={logEndRef} />
-      </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 }

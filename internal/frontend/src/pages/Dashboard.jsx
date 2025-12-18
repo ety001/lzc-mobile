@@ -1,6 +1,22 @@
-import { useEffect, useState } from 'react';
-import { systemAPI } from '../services/system';
-import { toast } from 'sonner';
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { RefreshCw, Power, Loader2 } from "lucide-react";
+
+import { systemAPI } from "../services/system";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Dashboard() {
   const [status, setStatus] = useState(null);
@@ -39,67 +55,109 @@ export default function Dashboard() {
   };
 
   const handleRestart = async () => {
-    if (!confirm('确定要重启 Asterisk 吗？这可能会中断正在进行的通话。')) {
-      return;
-    }
     setRestarting(true);
     try {
       await systemAPI.restart();
-      toast.success('Asterisk 重启已启动');
+      toast.success("Asterisk 重启已启动");
       fetchStatus();
     } catch (error) {
-      toast.error('重启失败', { description: error.message });
+      toast.error("重启失败", { description: error.message });
     } finally {
       setRestarting(false);
     }
   };
 
   if (loading) {
-    return <div className="text-center py-12">加载中...</div>;
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-40" />
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-28" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <div className="border-4 border-dashed border-gray-200 rounded-lg p-8">
-        <h2 className="text-2xl font-bold mb-6">系统状态</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-500">状态</div>
-            <div className="text-2xl font-bold capitalize">{status?.status || 'unknown'}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-500">活动通道</div>
-            <div className="text-2xl font-bold">{status?.channels || 0}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-500">SIP 注册数</div>
-            <div className="text-2xl font-bold">{status?.registrations || 0}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-500">运行时间</div>
-            <div className="text-2xl font-bold">
-              {status?.uptime ? `${Math.floor(status.uptime / 3600)}h` : 'N/A'}
-            </div>
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">系统状态</h2>
+          <p className="text-sm text-muted-foreground">查看 Asterisk 运行状态并执行维护操作。</p>
         </div>
 
-        <div className="flex gap-4">
-          <button
-            onClick={handleReload}
-            disabled={reloading}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {reloading ? '重新加载中...' : '重新加载配置'}
-          </button>
-          <button
-            onClick={handleRestart}
-            disabled={restarting}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-          >
-            {restarting ? '重启中...' : '重启 Asterisk'}
-          </button>
+        <div className="flex gap-2">
+          <Button onClick={handleReload} disabled={reloading} variant="secondary">
+            {reloading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            {reloading ? "重新加载中..." : "重新加载"}
+          </Button>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button disabled={restarting} variant="destructive">
+                {restarting ? <Loader2 className="animate-spin" /> : <Power />}
+                {restarting ? "重启中..." : "重启"}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>重启 Asterisk？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  这可能会中断正在进行的通话，并短暂影响注册与呼叫能力。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction onClick={handleRestart}>确认重启</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardDescription>状态</CardDescription>
+            <CardTitle className="capitalize">{status?.status || "unknown"}</CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardDescription>活动通道</CardDescription>
+            <CardTitle>{status?.channels || 0}</CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardDescription>SIP 注册数</CardDescription>
+            <CardTitle>{status?.registrations || 0}</CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardDescription>运行时间</CardDescription>
+            <CardTitle>
+              {status?.uptime ? `${Math.floor(status.uptime / 3600)}h` : "N/A"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
       </div>
     </div>
   );

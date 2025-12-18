@@ -1,20 +1,59 @@
-import { useEffect, useState } from 'react';
-import { extensionsAPI } from '../services/extensions';
-import { toast } from 'sonner';
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+
+import { extensionsAPI } from "../services/extensions";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+const DEFAULT_EXTENSION_FORM = {
+  username: "",
+  secret: "",
+  callerid: "",
+  host: "dynamic",
+  context: "default",
+  port: "",
+  transport: "tcp",
+};
 
 export default function Extensions() {
   const [extensions, setExtensions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
-    username: '',
-    secret: '',
-    callerid: '',
-    host: 'dynamic',
-    context: 'default',
-    port: '',
-    transport: 'tcp',
+    ...DEFAULT_EXTENSION_FORM,
   });
 
   const buildPayload = () => {
@@ -53,17 +92,9 @@ export default function Extensions() {
         await extensionsAPI.create(payload);
         toast.success('Extension 已创建');
       }
-      setShowModal(false);
       setEditing(null);
-      setFormData({
-        username: '',
-        secret: '',
-        callerid: '',
-        host: 'dynamic',
-        context: 'default',
-        port: '',
-        transport: 'tcp',
-      });
+      setOpen(false);
+      setFormData({ ...DEFAULT_EXTENSION_FORM });
       fetchExtensions();
     } catch (error) {
       toast.error('保存失败', { description: error.response?.data?.error || error.message });
@@ -81,13 +112,10 @@ export default function Extensions() {
       port: ext.port ? String(ext.port) : '',
       transport: ext.transport || 'tcp',
     });
-    setShowModal(true);
+    setOpen(true);
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('确定要删除这个 Extension 吗？')) {
-      return;
-    }
     try {
       await extensionsAPI.delete(id);
       toast.success('Extension 已删除');
@@ -98,164 +126,196 @@ export default function Extensions() {
   };
 
   if (loading) {
-    return <div className="text-center py-12">加载中...</div>;
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-9 w-28" />
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Extension 管理</h2>
-        <button
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Extension 管理</h2>
+          <p className="text-sm text-muted-foreground">管理 SIP 分机账号（创建/编辑/删除）。</p>
+        </div>
+        <Button
           onClick={() => {
             setEditing(null);
-            setFormData({
-              username: '',
-              secret: '',
-              callerid: '',
-              host: 'dynamic',
-              context: 'default',
-              port: '',
-              transport: 'tcp',
-            });
-            setShowModal(true);
+            setFormData({ ...DEFAULT_EXTENSION_FORM });
+            setOpen(true);
           }}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
         >
+          <Plus />
           新建 Extension
-        </button>
+        </Button>
       </div>
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
-          {extensions.map((ext) => (
-            <li key={ext.id} className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{ext.username}</div>
-                  <div className="text-sm text-gray-500">
-                    CallerID: {ext.callerid || 'N/A'} | Host: {ext.host} | Context: {ext.context}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(ext)}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    编辑
-                  </button>
-                  <button
-                    onClick={() => handleDelete(ext.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Extensions</CardTitle>
+          <CardDescription>当前已配置的分机列表。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>CallerID</TableHead>
+                <TableHead>Host</TableHead>
+                <TableHead>Context</TableHead>
+                <TableHead className="w-[160px] text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {extensions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                    暂无 Extension
+                  </TableCell>
+                </TableRow>
+              ) : (
+                extensions.map((ext) => (
+                  <TableRow key={ext.id}>
+                    <TableCell className="font-medium">{ext.username}</TableCell>
+                    <TableCell>{ext.callerid || "N/A"}</TableCell>
+                    <TableCell>{ext.host || "dynamic"}</TableCell>
+                    <TableCell>{ext.context || "default"}</TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button variant="secondary" size="sm" onClick={() => handleEdit(ext)}>
+                        <Pencil />
+                        编辑
+                      </Button>
 
-      {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold mb-4">{editing ? '编辑' : '新建'} Extension</h3>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Username</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Secret</label>
-                  <input
-                    type="password"
-                    required
-                    value={formData.secret}
-                    onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">CallerID</label>
-                  <input
-                    type="text"
-                    value={formData.callerid}
-                    onChange={(e) => setFormData({ ...formData, callerid: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Host</label>
-                  <input
-                    type="text"
-                    value={formData.host}
-                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Context</label>
-                  <input
-                    type="text"
-                    value={formData.context}
-                    onChange={(e) => setFormData({ ...formData, context: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Port（可选）</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={65535}
-                    placeholder="留空则不设置"
-                    value={formData.port}
-                    onChange={(e) => setFormData({ ...formData, port: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Transport</label>
-                  <select
-                    value={formData.transport}
-                    onChange={(e) => setFormData({ ...formData, transport: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                  >
-                    <option value="tcp">TCP</option>
-                    <option value="udp">UDP</option>
-                  </select>
-                </div>
-              </div>
-              <div className="mt-6 flex gap-2">
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  保存
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditing(null);
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                >
-                  取消
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            <Trash2 />
+                            删除
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>删除 Extension？</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              删除后会触发配置重载。若该 Extension 绑定了 Dongle，后端会拒绝删除。
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>取消</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(ext.id)}>确认删除</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "编辑 Extension" : "新建 Extension"}</DialogTitle>
+            <DialogDescription>保存后将自动渲染 Asterisk 配置并 reload。</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                required
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="secret">Secret</Label>
+              <Input
+                id="secret"
+                type="password"
+                required
+                value={formData.secret}
+                onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="callerid">CallerID（可选）</Label>
+              <Input
+                id="callerid"
+                value={formData.callerid}
+                onChange={(e) => setFormData({ ...formData, callerid: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="host">Host</Label>
+              <Input
+                id="host"
+                value={formData.host}
+                onChange={(e) => setFormData({ ...formData, host: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="context">Context</Label>
+              <Input
+                id="context"
+                value={formData.context}
+                onChange={(e) => setFormData({ ...formData, context: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="port">Port（可选）</Label>
+              <Input
+                id="port"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={65535}
+                placeholder="留空则不设置"
+                value={formData.port}
+                onChange={(e) => setFormData({ ...formData, port: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Transport</Label>
+              <Select
+                value={formData.transport}
+                onValueChange={(value) => setFormData({ ...formData, transport: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择 Transport" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tcp">TCP</SelectItem>
+                  <SelectItem value="udp">UDP</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit">保存</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
