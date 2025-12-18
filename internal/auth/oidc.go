@@ -58,6 +58,12 @@ func GetOIDCConfig() (*OIDCConfig, error) {
 	}
 
 	// 从环境变量获取基础 URL，用于构建完整的重定向 URI
+	// LAZYCAT_AUTH_BASE_URL: 应用程序的基础 URL（协议 + 域名/IP + 端口）
+	// 用于构建 OIDC 回调的完整重定向 URI，格式：{baseURL}{redirectURI}
+	// 例如：如果 baseURL 为 "https://example.com:8071"，redirectURI 为 "/auth/oidc/callback"
+	// 则完整重定向 URI 为 "https://example.com:8071/auth/oidc/callback"
+	// 默认值：http://localhost:8071（仅用于开发环境）
+	// 生产环境必须设置为实际的外部可访问地址，否则 OIDC 提供商无法正确回调
 	baseURL := os.Getenv("LAZYCAT_AUTH_BASE_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:8071"

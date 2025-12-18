@@ -67,6 +67,29 @@ export default function Dashboard() {
     }
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'normal':
+        return 'text-green-600';
+      case 'error':
+        return 'text-red-600';
+      case 'restarting':
+        return 'text-yellow-600';
+      default:
+        return 'text-gray-600';
+    }
+  };
+
+  const formatUptime = (seconds) => {
+    if (!seconds) return 'N/A';
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}天 ${hours}小时`;
+    if (hours > 0) return `${hours}小时 ${minutes}分钟`;
+    return `${minutes}分钟`;
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">

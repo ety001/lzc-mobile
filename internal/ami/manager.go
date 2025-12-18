@@ -38,7 +38,25 @@ func GetManager() *Manager {
 
 // Init 初始化 AMI 管理器
 func (m *Manager) Init() error {
-	client, err := NewClient()
+	// 重试连接 AMI，最多重试 10 次，每次间隔 2 秒
+	// 因为 webpanel 启动时 Asterisk 可能还没有完全启动
+	maxRetries := 10
+	retryInterval := 2 * time.Second
+
+	var client *Client
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		client, err = NewClient()
+		if err == nil {
+			break
+		}
+		if i < maxRetries-1 {
+			log.Printf("Failed to connect to AMI (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, err, retryInterval)
+			time.Sleep(retryInterval)
+		}
+	}
+
 	if err != nil {
 		return err
 	}
