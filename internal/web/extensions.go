@@ -16,7 +16,7 @@ type ExtensionRequest struct {
 	CallerID  string `json:"callerid"`
 	Host      string `json:"host"`
 	Context   string `json:"context"`
-	Port      int    `json:"port"`
+	Port      *int   `json:"port"` // 使用指针类型，支持空值（null）和数字
 	Transport string `json:"transport"`
 }
 
@@ -72,8 +72,13 @@ func (r *Router) createExtension(c *gin.Context) {
 		CallerID:  req.CallerID,
 		Host:      req.Host,
 		Context:   req.Context,
-		Port:      req.Port,
 		Transport: req.Transport,
+	}
+	// 处理 Port 字段：如果为 nil 或空，则设置为 0
+	if req.Port != nil {
+		extension.Port = *req.Port
+	} else {
+		extension.Port = 0
 	}
 
 	if err := database.DB.Create(&extension).Error; err != nil {
@@ -123,7 +128,10 @@ func (r *Router) updateExtension(c *gin.Context) {
 	if req.Transport != "" {
 		extension.Transport = req.Transport
 	}
-	extension.Port = req.Port
+	// 处理 Port 字段：如果为 nil 或空，则保持原值或设置为 0
+	if req.Port != nil {
+		extension.Port = *req.Port
+	}
 
 	if err := database.DB.Save(&extension).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

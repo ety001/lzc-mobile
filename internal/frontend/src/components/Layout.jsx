@@ -69,7 +69,7 @@ export default function Layout() {
       {/* 侧边栏 */}
       <aside className="main-sidebar sidebar-dark-primary elevation-4">
         <a href="/" className="brand-link">
-          <span className="brand-text font-weight-light">懒猫通信</span>
+          <span className="brand-text font-weight-light">懒猫通讯</span>
         </a>
 
         <div className="sidebar">
@@ -127,7 +127,7 @@ export default function Layout() {
         <div className="float-right d-none d-sm-block">
           <b>版本</b> 1.0.0
         </div>
-        <strong>Copyright &copy; 2024 懒猫通信.</strong> All rights reserved.
+        <strong>Copyright &copy; 2024 懒猫通讯.</strong> All rights reserved.
       </footer>
     </div>
   );

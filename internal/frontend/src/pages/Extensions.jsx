@@ -35,10 +35,25 @@ export default function Extensions() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // 准备提交数据，将空字符串或无效值转换为 null
+      const portValue = formData.port === '' || formData.port === null || formData.port === undefined
+        ? null
+        : (isNaN(parseInt(formData.port, 10)) ? null : parseInt(formData.port, 10));
+      
+      const submitData = {
+        username: formData.username,
+        secret: formData.secret,
+        callerid: formData.callerid || '',
+        host: formData.host || 'dynamic',
+        context: formData.context || 'default',
+        transport: formData.transport || 'tcp',
+        port: portValue, // 始终包含 port 字段，空值时发送 null
+      };
+      
       if (editing) {
-        await extensionsAPI.update(editing.id, formData);
+        await extensionsAPI.update(editing.id, submitData);
       } else {
-        await extensionsAPI.create(formData);
+        await extensionsAPI.create(submitData);
       }
       setShowModal(false);
       setEditing(null);
@@ -65,7 +80,7 @@ export default function Extensions() {
       callerid: ext.callerid || '',
       host: ext.host || 'dynamic',
       context: ext.context || 'default',
-      port: ext.port || '',
+      port: ext.port && ext.port !== 0 ? ext.port.toString() : '',
       transport: ext.transport || 'tcp',
     });
     setShowModal(true);
@@ -193,6 +208,16 @@ export default function Extensions() {
                     value={formData.context}
                     onChange={(e) => setFormData({ ...formData, context: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Port (可选)</label>
+                  <input
+                    type="number"
+                    value={formData.port}
+                    onChange={(e) => setFormData({ ...formData, port: e.target.value })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                    placeholder="留空表示使用默认端口"
                   />
                 </div>
                 <div>
