@@ -1,35 +1,35 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { systemAPI } from '../services/system';
-import { useEffect, useState } from 'react';
+import { Outlet, Link, useLocation } from "react-router-dom";
+import { systemAPI } from "../services/system";
+import { useEffect, useState } from "react";
+import { Toaster } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 function StatusIndicator({ status }) {
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'normal':
-        return <span className="badge badge-success">正常</span>;
-      case 'error':
-        return <span className="badge badge-danger">错误</span>;
-      case 'restarting':
-        return <span className="badge badge-warning">重启中</span>;
-      default:
-        return <span className="badge badge-secondary">未知</span>;
-    }
+  const config = {
+    normal: { label: "normal", className: "bg-emerald-600 text-white hover:bg-emerald-600" },
+    restarting: { label: "restarting", className: "bg-amber-500 text-black hover:bg-amber-500" },
+    error: { label: "error", className: "bg-destructive text-destructive-foreground hover:bg-destructive" },
+    unknown: { label: "unknown", className: "bg-muted text-foreground hover:bg-muted" },
   };
 
-  return getStatusBadge(status);
+  const current = config[status] || config.unknown;
+  return <Badge className={current.className}>{current.label}</Badge>;
 }
 
 export default function Layout() {
   const location = useLocation();
-  const [status, setStatus] = useState('unknown');
+  const [status, setStatus] = useState("unknown");
 
   useEffect(() => {
     const fetchStatus = async () => {
       try {
         const response = await systemAPI.getStatus();
         setStatus(response.data.status);
-      } catch (error) {
-        setStatus('error');
+      } catch {
+        setStatus("error");
       }
     };
 
@@ -40,95 +40,49 @@ export default function Layout() {
   }, []);
 
   const navItems = [
-    { path: '/', label: '仪表盘', icon: 'fas fa-tachometer-alt' },
-    { path: '/extensions', label: 'Extension 管理', icon: 'fas fa-phone' },
-    { path: '/dongles', label: 'Dongle 管理', icon: 'fas fa-mobile-alt' },
-    { path: '/notifications', label: '通知配置', icon: 'fas fa-bell' },
-    { path: '/logs', label: '日志', icon: 'fas fa-file-alt' },
+    { path: "/", label: "仪表盘" },
+    { path: "/extensions", label: "Extension" },
+    { path: "/dongles", label: "Dongle" },
+    { path: "/notifications", label: "通知" },
+    { path: "/logs", label: "日志" },
   ];
 
   return (
-    <div className="wrapper">
-      {/* 顶部导航栏 */}
-      <nav className="main-header navbar navbar-expand navbar-white navbar-light border-bottom">
-        <ul className="navbar-nav">
-          <li className="nav-item">
-            <a className="nav-link" data-widget="pushmenu" href="#" role="button" onClick={(e) => e.preventDefault()}>
-              <i className="fas fa-bars"></i>
-            </a>
-          </li>
-        </ul>
-
-        <ul className="navbar-nav ml-auto">
-          <li className="nav-item" style={{ display: 'flex', alignItems: 'center' }}>
-            <StatusIndicator status={status} />
-          </li>
-        </ul>
-      </nav>
-
-      {/* 侧边栏 */}
-      <aside className="main-sidebar sidebar-dark-primary elevation-4">
-        <a href="/" className="brand-link">
-          <span className="brand-text font-weight-light">懒猫通讯</span>
-        </a>
-
-        <div className="sidebar">
-          <nav className="mt-2">
-            <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
-              {navItems.map((item) => (
-                <li key={item.path} className="nav-item">
-                  <Link
-                    to={item.path}
-                    className={`nav-link ${location.pathname === item.path ? 'active' : ''}`}
+    <div className="min-h-screen bg-background">
+      <Toaster richColors position="top-right" />
+      <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
+        <div className="container mx-auto flex h-14 items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <Link to="/" className="font-semibold tracking-tight">
+              懒猫通信
+            </Link>
+            <Separator orientation="vertical" className="h-6" />
+            <nav className="hidden md:flex items-center gap-1">
+              {navItems.map((item) => {
+                const active = location.pathname === item.path;
+                return (
+                  <Button
+                    key={item.path}
+                    asChild
+                    variant={active ? "secondary" : "ghost"}
+                    size="sm"
                   >
-                    <i className={`nav-icon ${item.icon}`}></i>
-                    <p>{item.label}</p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        </div>
-      </aside>
+                    <Link to={item.path}>{item.label}</Link>
+                  </Button>
+                );
+              })}
+            </nav>
+          </div>
 
-      {/* 主内容区域 */}
-      <div className="content-wrapper">
-        <div className="content-header">
-          <div className="container-fluid">
-            <div className="row mb-2">
-              <div className="col-sm-6">
-                <h1 className="m-0">
-                  {navItems.find(item => item.path === location.pathname)?.label || '仪表盘'}
-                </h1>
-              </div>
-              <div className="col-sm-6">
-                <ol className="breadcrumb float-sm-right">
-                  <li className="breadcrumb-item">
-                    <Link to="/">首页</Link>
-                  </li>
-                  <li className="breadcrumb-item active">
-                    {navItems.find(item => item.path === location.pathname)?.label || '仪表盘'}
-                  </li>
-                </ol>
-              </div>
-            </div>
+          <div className="flex items-center gap-2">
+            <StatusIndicator status={status} />
           </div>
         </div>
+      </header>
 
-        <section className="content">
-          <div className="container-fluid">
-            <Outlet />
-          </div>
-        </section>
-      </div>
-
-      {/* 页脚 */}
-      <footer className="main-footer">
-        <div className="float-right d-none d-sm-block">
-          <b>版本</b> 1.0.0
-        </div>
-        <strong>Copyright &copy; 2024 懒猫通讯.</strong> All rights reserved.
-      </footer>
+      <main className="container mx-auto px-4 py-6">
+        <Outlet />
+      </main>
     </div>
   );
 }

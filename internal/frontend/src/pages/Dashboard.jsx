@@ -1,5 +1,22 @@
-import { useEffect, useState } from 'react';
-import { systemAPI } from '../services/system';
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { RefreshCw, Power, Loader2 } from "lucide-react";
+
+import { systemAPI } from "../services/system";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Dashboard() {
   const [status, setStatus] = useState(null);
@@ -28,26 +45,23 @@ export default function Dashboard() {
     setReloading(true);
     try {
       await systemAPI.reload();
-      alert('Asterisk 配置已重新加载');
+      toast.success('Asterisk 配置已重新加载');
       fetchStatus();
     } catch (error) {
-      alert('重新加载失败: ' + error.message);
+      toast.error('重新加载失败', { description: error.message });
     } finally {
       setReloading(false);
     }
   };
 
   const handleRestart = async () => {
-    if (!confirm('确定要重启 Asterisk 吗？这可能会中断正在进行的通话。')) {
-      return;
-    }
     setRestarting(true);
     try {
       await systemAPI.restart();
-      alert('Asterisk 重启已启动');
+      toast.success("Asterisk 重启已启动");
       fetchStatus();
     } catch (error) {
-      alert('重启失败: ' + error.message);
+      toast.error("重启失败", { description: error.message });
     } finally {
       setRestarting(false);
     }
@@ -78,167 +92,95 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-        <p className="mt-2 text-gray-600">加载中...</p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-40" />
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-28" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container-fluid p-4">
-      <div className="row">
-        <div className="col-12">
-          <div className="card">
-            <div className="card-header bg-white border-bottom">
-              <h3 className="card-title mb-0">系统状态</h3>
-            </div>
-            <div className="card-body">
-              <div className="row mb-4">
-                <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="info-box">
-                    <span className="info-box-icon bg-info">
-                      <i className="fas fa-circle"></i>
-                    </span>
-                    <div className="info-box-content">
-                      <span className="info-box-text">系统状态</span>
-                      <span className={`info-box-number ${getStatusColor(status?.status)}`}>
-                        {status?.status ? status.status.toUpperCase() : 'UNKNOWN'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="info-box">
-                    <span className="info-box-icon bg-success">
-                      <i className="fas fa-phone"></i>
-                    </span>
-                    <div className="info-box-content">
-                      <span className="info-box-text">活动通道</span>
-                      <span className="info-box-number">{status?.channels || 0}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="info-box">
-                    <span className="info-box-icon bg-warning">
-                      <i className="fas fa-users"></i>
-                    </span>
-                    <div className="info-box-content">
-                      <span className="info-box-text">SIP 注册数</span>
-                      <span className="info-box-number">{status?.registrations || 0}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="info-box">
-                    <span className="info-box-icon bg-primary">
-                      <i className="fas fa-clock"></i>
-                    </span>
-                    <div className="info-box-content">
-                      <span className="info-box-text">运行时间</span>
-                      <span className="info-box-number">{formatUptime(status?.uptime)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="row">
-                <div className="col-12">
-                  <table className="table table-bordered table-striped">
-                    <thead className="thead-light">
-                      <tr>
-                        <th>项目</th>
-                        <th>值</th>
-                        <th>说明</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td><strong>系统状态</strong></td>
-                        <td>
-                          <span className={`badge badge-${status?.status === 'normal' ? 'success' : status?.status === 'error' ? 'danger' : 'secondary'}`}>
-                            {status?.status ? status.status.toUpperCase() : 'UNKNOWN'}
-                          </span>
-                        </td>
-                        <td>Asterisk 系统当前运行状态</td>
-                      </tr>
-                      <tr>
-                        <td><strong>活动通道数</strong></td>
-                        <td><span className="badge badge-info">{status?.channels || 0}</span></td>
-                        <td>当前正在进行的通话通道数量</td>
-                      </tr>
-                      <tr>
-                        <td><strong>SIP 注册数</strong></td>
-                        <td><span className="badge badge-warning">{status?.registrations || 0}</span></td>
-                        <td>已注册的 SIP 终端数量</td>
-                      </tr>
-                      <tr>
-                        <td><strong>运行时间</strong></td>
-                        <td>{formatUptime(status?.uptime)}</td>
-                        <td>系统自启动以来的运行时长</td>
-                      </tr>
-                      {status?.last_update && (
-                        <tr>
-                          <td><strong>最后更新</strong></td>
-                          <td>{new Date(status.last_update).toLocaleString('zh-CN')}</td>
-                          <td>状态信息的最后更新时间</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="row mt-4">
-                <div className="col-12">
-                  <div className="btn-toolbar" role="toolbar">
-                    <div className="btn-group mr-2" role="group">
-                      <button
-                        type="button"
-                        onClick={handleReload}
-                        disabled={reloading}
-                        className="btn btn-primary"
-                      >
-                        {reloading ? (
-                          <>
-                            <span className="spinner-border spinner-border-sm mr-2" role="status"></span>
-                            重新加载中...
-                          </>
-                        ) : (
-                          <>
-                            <i className="fas fa-sync-alt mr-2"></i>
-                            重新加载配置
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <div className="btn-group" role="group">
-                      <button
-                        type="button"
-                        onClick={handleRestart}
-                        disabled={restarting}
-                        className="btn btn-danger"
-                      >
-                        {restarting ? (
-                          <>
-                            <span className="spinner-border spinner-border-sm mr-2" role="status"></span>
-                            重启中...
-                          </>
-                        ) : (
-                          <>
-                            <i className="fas fa-power-off mr-2"></i>
-                            重启 Asterisk
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">系统状态</h2>
+          <p className="text-sm text-muted-foreground">查看 Asterisk 运行状态并执行维护操作。</p>
         </div>
+
+        <div className="flex gap-2">
+          <Button onClick={handleReload} disabled={reloading} variant="secondary">
+            {reloading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            {reloading ? "重新加载中..." : "重新加载"}
+          </Button>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button disabled={restarting} variant="destructive">
+                {restarting ? <Loader2 className="animate-spin" /> : <Power />}
+                {restarting ? "重启中..." : "重启"}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>重启 Asterisk？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  这可能会中断正在进行的通话，并短暂影响注册与呼叫能力。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction onClick={handleRestart}>确认重启</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardDescription>状态</CardDescription>
+            <CardTitle className="capitalize">{status?.status || "unknown"}</CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardDescription>活动通道</CardDescription>
+            <CardTitle>{status?.channels || 0}</CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardDescription>SIP 注册数</CardDescription>
+            <CardTitle>{status?.registrations || 0}</CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardDescription>运行时间</CardDescription>
+            <CardTitle>
+              {status?.uptime ? `${Math.floor(status.uptime / 3600)}h` : "N/A"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent />
+        </Card>
       </div>
     </div>
   );

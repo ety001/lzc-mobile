@@ -1,17 +1,38 @@
-import { useEffect, useState } from 'react';
-import { notificationsAPI } from '../services/notifications';
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Settings2 } from "lucide-react";
+
+import { notificationsAPI } from "../services/notifications";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CHANNELS = [
-  { value: 'smtp', label: 'SMTP (邮件)' },
-  { value: 'slack', label: 'Slack' },
-  { value: 'telegram', label: 'Telegram' },
-  { value: 'webhook', label: 'Webhook' },
+  { value: "smtp", label: "SMTP (邮件)" },
+  { value: "slack", label: "Slack" },
+  { value: "telegram", label: "Telegram" },
+  { value: "webhook", label: "Webhook" },
 ];
 
 export default function Notifications() {
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     enabled: false,
     smtp_host: '',
@@ -39,7 +60,7 @@ export default function Notifications() {
       setConfigs(response.data);
     } catch (error) {
       console.error('Failed to fetch configs:', error);
-      alert('获取通知配置失败');
+      toast.error('获取通知配置失败');
     } finally {
       setLoading(false);
     }
@@ -48,6 +69,7 @@ export default function Notifications() {
   const handleEdit = (channel) => {
     const config = configs.find((c) => c.channel === channel) || { channel, enabled: false };
     setEditing(channel);
+    setOpen(true);
     setFormData({
       enabled: config.enabled || false,
       smtp_host: config.smtp_host || '',
@@ -70,16 +92,27 @@ export default function Notifications() {
     e.preventDefault();
     try {
       await notificationsAPI.update(editing, formData);
+      setOpen(false);
       setEditing(null);
       fetchConfigs();
-      alert('配置保存成功');
+      toast.success('配置保存成功');
     } catch (error) {
-      alert('保存失败: ' + (error.response?.data?.error || error.message));
+      toast.error('保存失败', { description: error.response?.data?.error || error.message });
     }
   };
 
   if (loading) {
-    return <div className="text-center py-12">加载中...</div>;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-40" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
+      </div>
+    );
   }
 
   const getConfigForChannel = (channel) => {
@@ -87,208 +120,218 @@ export default function Notifications() {
   };
 
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <h2 className="text-2xl font-bold mb-6">通知配置</h2>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">通知配置</h2>
+        <p className="text-sm text-muted-foreground">配置短信转发的通知渠道（支持多渠道并行）。</p>
+      </div>
 
-      <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
         {CHANNELS.map((channel) => {
           const config = getConfigForChannel(channel.value);
+          const enabled = !!config?.enabled;
           return (
-            <div key={channel.value} className="bg-white shadow rounded-lg p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">{channel.label}</h3>
-                <div className="flex items-center gap-4">
-                  <span className={`text-sm ${config?.enabled ? 'text-green-600' : 'text-gray-400'}`}>
-                    {config?.enabled ? '已启用' : '未启用'}
-                  </span>
-                  <button
-                    onClick={() => handleEdit(channel.value)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    配置
-                  </button>
+            <Card key={channel.value}>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <div className="space-y-1">
+                  <CardTitle className="text-lg">{channel.label}</CardTitle>
+                  <CardDescription>
+                    {enabled ? "已启用" : "未启用"}
+                  </CardDescription>
                 </div>
-              </div>
-            </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={enabled ? "default" : "secondary"}
+                    className={enabled ? "bg-emerald-600 text-white hover:bg-emerald-600" : ""}
+                  >
+                    {enabled ? "Enabled" : "Disabled"}
+                  </Badge>
+                  <Button variant="secondary" onClick={() => handleEdit(channel.value)}>
+                    <Settings2 />
+                    配置
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent />
+            </Card>
           );
         })}
       </div>
 
-      {editing && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-4">配置 {CHANNELS.find((c) => c.value === editing)?.label}</h3>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={formData.enabled}
-                    onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                    className="mr-2"
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (!v) setEditing(null);
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              配置 {CHANNELS.find((c) => c.value === editing)?.label}
+            </DialogTitle>
+            <DialogDescription>保存后立即生效（短信转发将使用新配置）。</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <div className="font-medium">启用此通知渠道</div>
+                <div className="text-sm text-muted-foreground">启用后短信会转发到该渠道。</div>
+              </div>
+              <Switch
+                checked={formData.enabled}
+                onCheckedChange={(checked) => setFormData({ ...formData, enabled: checked })}
+              />
+            </div>
+
+            {editing === "smtp" && (
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label>SMTP 服务器</Label>
+                  <Input
+                    value={formData.smtp_host}
+                    onChange={(e) => setFormData({ ...formData, smtp_host: e.target.value })}
                   />
-                  启用此通知渠道
-                </label>
-
-                {editing === 'smtp' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">SMTP 服务器</label>
-                      <input
-                        type="text"
-                        value={formData.smtp_host}
-                        onChange={(e) => setFormData({ ...formData, smtp_host: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">SMTP 端口</label>
-                      <input
-                        type="number"
-                        value={formData.smtp_port}
-                        onChange={(e) => setFormData({ ...formData, smtp_port: parseInt(e.target.value) })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">用户名</label>
-                      <input
-                        type="text"
-                        value={formData.smtp_user}
-                        onChange={(e) => setFormData({ ...formData, smtp_user: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">密码</label>
-                      <input
-                        type="password"
-                        value={formData.smtp_password}
-                        onChange={(e) => setFormData({ ...formData, smtp_password: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">发件人</label>
-                      <input
-                        type="email"
-                        value={formData.smtp_from}
-                        onChange={(e) => setFormData({ ...formData, smtp_from: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">收件人</label>
-                      <input
-                        type="email"
-                        value={formData.smtp_to}
-                        onChange={(e) => setFormData({ ...formData, smtp_to: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.smtp_tls}
-                        onChange={(e) => setFormData({ ...formData, smtp_tls: e.target.checked })}
-                        className="mr-2"
-                      />
-                      使用 TLS/SSL
-                    </label>
-                  </>
-                )}
-
-                {editing === 'slack' && (
+                </div>
+                <div className="grid gap-2">
+                  <Label>SMTP 端口</Label>
+                  <Input
+                    type="number"
+                    value={formData.smtp_port}
+                    onChange={(e) =>
+                      setFormData({ ...formData, smtp_port: Number(e.target.value) || 0 })
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>用户名</Label>
+                  <Input
+                    value={formData.smtp_user}
+                    onChange={(e) => setFormData({ ...formData, smtp_user: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>密码</Label>
+                  <Input
+                    type="password"
+                    value={formData.smtp_password}
+                    onChange={(e) => setFormData({ ...formData, smtp_password: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>发件人</Label>
+                  <Input
+                    type="email"
+                    value={formData.smtp_from}
+                    onChange={(e) => setFormData({ ...formData, smtp_from: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>收件人</Label>
+                  <Input
+                    type="email"
+                    value={formData.smtp_to}
+                    onChange={(e) => setFormData({ ...formData, smtp_to: e.target.value })}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Webhook URL</label>
-                    <input
-                      type="url"
-                      value={formData.slack_webhook_url}
-                      onChange={(e) => setFormData({ ...formData, slack_webhook_url: e.target.value })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                    />
+                    <div className="font-medium">使用 TLS/SSL</div>
+                    <div className="text-sm text-muted-foreground">根据你的 SMTP 服务商要求开启。</div>
                   </div>
-                )}
-
-                {editing === 'telegram' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Bot Token</label>
-                      <input
-                        type="text"
-                        value={formData.telegram_bot_token}
-                        onChange={(e) => setFormData({ ...formData, telegram_bot_token: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Chat ID</label>
-                      <input
-                        type="text"
-                        value={formData.telegram_chat_id}
-                        onChange={(e) => setFormData({ ...formData, telegram_chat_id: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {editing === 'webhook' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Webhook URL</label>
-                      <input
-                        type="url"
-                        value={formData.webhook_url}
-                        onChange={(e) => setFormData({ ...formData, webhook_url: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">HTTP 方法</label>
-                      <select
-                        value={formData.webhook_method}
-                        onChange={(e) => setFormData({ ...formData, webhook_method: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      >
-                        <option value="POST">POST</option>
-                        <option value="GET">GET</option>
-                        <option value="PUT">PUT</option>
-                        <option value="PATCH">PATCH</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">自定义请求头 (JSON)</label>
-                      <textarea
-                        value={formData.webhook_header}
-                        onChange={(e) => setFormData({ ...formData, webhook_header: e.target.value })}
-                        rows={3}
-                        placeholder='{"Authorization": "Bearer token"}'
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                      />
-                    </div>
-                  </>
-                )}
+                  <Switch
+                    checked={formData.smtp_tls}
+                    onCheckedChange={(checked) => setFormData({ ...formData, smtp_tls: checked })}
+                  />
+                </div>
               </div>
-              <div className="mt-6 flex gap-2">
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  保存
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                >
-                  取消
-                </button>
+            )}
+
+            {editing === "slack" && (
+              <div className="grid gap-2">
+                <Label>Webhook URL</Label>
+                <Input
+                  type="url"
+                  value={formData.slack_webhook_url}
+                  onChange={(e) => setFormData({ ...formData, slack_webhook_url: e.target.value })}
+                />
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            )}
+
+            {editing === "telegram" && (
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label>Bot Token</Label>
+                  <Input
+                    value={formData.telegram_bot_token}
+                    onChange={(e) =>
+                      setFormData({ ...formData, telegram_bot_token: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Chat ID</Label>
+                  <Input
+                    value={formData.telegram_chat_id}
+                    onChange={(e) =>
+                      setFormData({ ...formData, telegram_chat_id: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+            )}
+
+            {editing === "webhook" && (
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label>Webhook URL</Label>
+                  <Input
+                    type="url"
+                    value={formData.webhook_url}
+                    onChange={(e) => setFormData({ ...formData, webhook_url: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>HTTP 方法</Label>
+                  <Select
+                    value={formData.webhook_method}
+                    onValueChange={(value) => setFormData({ ...formData, webhook_method: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择 HTTP 方法" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="PUT">PUT</SelectItem>
+                      <SelectItem value="PATCH">PATCH</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>自定义请求头（JSON）</Label>
+                  <Textarea
+                    value={formData.webhook_header}
+                    onChange={(e) =>
+                      setFormData({ ...formData, webhook_header: e.target.value })
+                    }
+                    rows={4}
+                    placeholder='{"Authorization":"Bearer token"}'
+                  />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit">保存</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
