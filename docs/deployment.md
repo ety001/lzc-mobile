@@ -55,9 +55,16 @@ ASTERISK_AMI_HOST=localhost
 ASTERISK_AMI_PORT=5038
 
 # OIDC 重定向 URI（默认 /auth/oidc/callback）
+# 这是 OIDC 回调的相对路径，会与 LAZYCAT_AUTH_BASE_URL 组合成完整的回调地址
 LAZYCAT_AUTH_OIDC_REDIRECT_URI=/auth/oidc/callback
 
 # OIDC 基础 URL（用于构建完整的重定向 URI）
+# 格式：协议://域名或IP:端口（例如：https://example.com:8071 或 http://192.168.1.100:8071）
+# 此 URL 必须是从外部可访问的地址（OIDC 提供商需要能够访问此地址进行回调）
+# 默认值：http://localhost:8071（仅用于本地开发）
+# 生产环境必须设置为实际的外部可访问地址，否则 OIDC 认证将失败
+# 完整回调地址 = LAZYCAT_AUTH_BASE_URL + LAZYCAT_AUTH_OIDC_REDIRECT_URI
+# 例如：https://example.com:8071 + /auth/oidc/callback = https://example.com:8071/auth/oidc/callback
 LAZYCAT_AUTH_BASE_URL=http://localhost:8071
 ```
 
@@ -282,9 +289,11 @@ supervisorctl restart webpanel
    - 查看 Asterisk 日志
 
 3. **OIDC 登录失败**
-   - 检查 OIDC 环境变量
-   - 检查 `LAZYCAT_AUTH_BASE_URL` 是否正确
-   - 查看容器日志
+   - 检查 OIDC 环境变量是否正确配置
+   - 检查 `LAZYCAT_AUTH_BASE_URL` 是否为外部可访问的地址（不能使用 localhost）
+   - 确认 `LAZYCAT_AUTH_BASE_URL` + `LAZYCAT_AUTH_OIDC_REDIRECT_URI` 组成的完整回调地址已在 OIDC 提供商处注册
+   - 检查 OIDC 提供商的控制台，确认回调地址配置正确
+   - 查看容器日志获取详细错误信息
 
 ## 更新部署
 

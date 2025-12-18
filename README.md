@@ -42,6 +42,7 @@ ASTERISK_AMI_PASSWORD=your_password
 **可选配置**：
 ```bash
 WEB_PORT=8071  # Web 管理端口，默认 8071
+LAZYCAT_AUTH_OIDC_REDIRECT_URI=/auth/oidc/callback  # OIDC 回调路径，默认 /auth/oidc/callback
 ```
 
 ### 运行容器
