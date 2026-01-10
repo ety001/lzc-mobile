@@ -66,7 +66,8 @@ func NewClient() (*Client, error) {
 	if host == "localhost" {
 		host = "127.0.0.1"
 	}
-	address := fmt.Sprintf("%s:%s", host, port)
+	// 使用 net.JoinHostPort 正确处理 IPv4 和 IPv6 地址
+	address := net.JoinHostPort(host, port)
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to AMI: %w", err)

@@ -8,6 +8,7 @@ import (
 	"github.com/ety001/lzc-mobile/internal/ami"
 	"github.com/ety001/lzc-mobile/internal/config"
 	"github.com/ety001/lzc-mobile/internal/database"
+	"github.com/ety001/lzc-mobile/internal/sms"
 	"github.com/ety001/lzc-mobile/internal/web"
 	"github.com/gin-gonic/gin"
 )
@@ -45,6 +46,10 @@ func main() {
 	if err := amiManager.Init(); err != nil {
 		log.Printf("Warning: Failed to initialize AMI manager: %v", err)
 		log.Println("AMI features will be unavailable, but the web server will still start")
+	} else {
+		// 注册 SMS handler，通过 AMI 事件接收的 SMS 也会保存到数据库
+		smsHandler := sms.NewHandler()
+		smsHandler.Register()
 	}
 
 	// 设置 Gin 模式

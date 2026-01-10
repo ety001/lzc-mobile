@@ -91,6 +91,18 @@ type DongleBinding struct {
 	UpdatedAt   time.Time
 }
 
+// SMSMessage SMS 消息
+type SMSMessage struct {
+	ID          uint      `gorm:"primaryKey"`
+	DongleID    string    `gorm:"type:varchar(100);not null;index"` // Dongle 设备 ID（如 dongle0）
+	PhoneNumber string    `gorm:"type:varchar(50);not null;index"`    // 电话号码
+	Content     string    `gorm:"type:text;not null"`                 // 短信内容
+	Pushed      bool      `gorm:"default:false;index"`                // 是否已推送
+	PushedAt    *time.Time                                             // 推送时间
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 // AutoMigrate 自动迁移所有表
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
@@ -99,5 +111,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&NotificationConfig{},
 		&Extension{},
 		&DongleBinding{},
+		&SMSMessage{},
 	)
 }

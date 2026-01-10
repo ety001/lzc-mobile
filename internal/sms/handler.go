@@ -3,6 +3,7 @@ package sms
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/ety001/lzc-mobile/internal/ami"
 	"github.com/ety001/lzc-mobile/internal/database"
@@ -27,6 +28,7 @@ func NewHandler() *Handler {
 }
 
 // OnSMSReceived 处理收到的短信
+// 推送消息到所有启用的通知渠道，并保存到数据库
 func (h *Handler) OnSMSReceived(device, number, message string) {
 	log.Printf("SMS received from %s on device %s: %s", number, device, message)
 
@@ -37,26 +39,43 @@ func (h *Handler) OnSMSReceived(device, number, message string) {
 	var enabledConfigs []database.NotificationConfig
 	if err := database.DB.Where("enabled = ?", true).Find(&enabledConfigs).Error; err != nil {
 		log.Printf("Error loading notification configs: %v", err)
+		// 即使加载配置失败，也继续保存到数据库
+	} else {
+		// 提取渠道列表
+		channels := make([]database.NotificationChannel, 0, len(enabledConfigs))
+		for _, config := range enabledConfigs {
+			channels = append(channels, config.Channel)
+		}
+
+		// 发送通知到所有启用的渠道
+		if len(channels) > 0 {
+			errors := h.notifyManager.SendToChannels(channels, notificationMessage)
+			if len(errors) > 0 {
+				log.Printf("Some notifications failed: %v", errors)
+			} else {
+				log.Println("SMS notification sent successfully")
+			}
+		} else {
+			log.Println("No notification channels enabled")
+		}
+	}
+
+	// 保存到数据库，标记为已推送
+	now := time.Now()
+	smsMessage := database.SMSMessage{
+		DongleID:    device,
+		PhoneNumber: number,
+		Content:     message,
+		Pushed:      true,
+		PushedAt:    &now,
+	}
+
+	if err := database.DB.Create(&smsMessage).Error; err != nil {
+		log.Printf("Error saving SMS message to database: %v", err)
 		return
 	}
 
-	// 提取渠道列表
-	channels := make([]database.NotificationChannel, 0, len(enabledConfigs))
-	for _, config := range enabledConfigs {
-		channels = append(channels, config.Channel)
-	}
-
-	// 发送通知到所有启用的渠道
-	if len(channels) > 0 {
-		errors := h.notifyManager.SendToChannels(channels, notificationMessage)
-		if len(errors) > 0 {
-			log.Printf("Some notifications failed: %v", errors)
-		} else {
-			log.Println("SMS notification sent successfully")
-		}
-	} else {
-		log.Println("No notification channels enabled")
-	}
+	log.Printf("SMS message saved to database with ID %d", smsMessage.ID)
 }
 
 // OnStatusUpdate 状态更新（实现 StatusSubscriber 接口）
