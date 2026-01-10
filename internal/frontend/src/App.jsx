@@ -1,11 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import Extensions from './pages/Extensions';
-import Dongles from './pages/Dongles';
-import Notifications from './pages/Notifications';
-import Logs from './pages/Logs';
-import './App.css';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Layout from "./components/layout/Layout";
+import Dashboard from "./pages/Dashboard";
+import Extensions from "./pages/Extensions";
+import Dongles from "./pages/Dongles";
+import Notifications from "./pages/Notifications";
+import Logs from "./pages/Logs";
 
 function App() {
   return (

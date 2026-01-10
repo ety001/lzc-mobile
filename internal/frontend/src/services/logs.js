@@ -1,11 +1,12 @@
 import api from './api';
 
+// 获取 API 基础地址（与 api.js 保持一致）
+const getApiBaseURL = () => {
+  const baseURL = import.meta.env.VITE_API_BASE_URL;
+  return baseURL ? `${baseURL}/api/v1` : '/api/v1';
+};
+
 export const logsAPI = {
   get: (lines = 100) => api.get(`/logs?lines=${lines}`),
-  stream: () => {
-    // 使用 EventSource 进行 SSE 流式传输
-    // 注意：EventSource 不支持自定义 headers，所以需要确保 API 支持 cookie 认证
-    // 或者使用 token 作为查询参数
-    return new EventSource('/api/v1/logs/stream', { withCredentials: true });
-  },
+  stream: () => new EventSource(`${getApiBaseURL()}/logs/stream`, { withCredentials: true }),
 };

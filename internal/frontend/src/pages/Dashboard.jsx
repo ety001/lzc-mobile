@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { RefreshCw, Power, Loader2 } from "lucide-react";
-
-import { systemAPI } from "../services/system";
+import { RefreshCw, Power, Loader2, Activity, Phone, Users, Clock } from "lucide-react";
+import { systemAPI } from "@/services/system";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -35,7 +35,7 @@ export default function Dashboard() {
       const response = await systemAPI.getStatus();
       setStatus(response.data);
     } catch (error) {
-      console.error('Failed to fetch status:', error);
+      console.error("Failed to fetch status:", error);
     } finally {
       setLoading(false);
     }
@@ -45,10 +45,10 @@ export default function Dashboard() {
     setReloading(true);
     try {
       await systemAPI.reload();
-      toast.success('Asterisk 配置已重新加载');
+      toast.success("Asterisk 配置已重新加载");
       fetchStatus();
     } catch (error) {
-      toast.error('重新加载失败', { description: error.message });
+      toast.error("重新加载失败", { description: error.message });
     } finally {
       setReloading(false);
     }
@@ -67,76 +67,87 @@ export default function Dashboard() {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'normal':
-        return 'text-green-600';
-      case 'error':
-        return 'text-red-600';
-      case 'restarting':
-        return 'text-yellow-600';
+  const getStatusConfig = (statusValue) => {
+    switch (statusValue) {
+      case "normal":
+        return { label: "正常", className: "bg-emerald-500 hover:bg-emerald-500 text-white" };
+      case "error":
+        return { label: "错误", className: "bg-destructive hover:bg-destructive text-destructive-foreground" };
+      case "restarting":
+        return { label: "重启中", className: "bg-amber-500 hover:bg-amber-500 text-white" };
       default:
-        return 'text-gray-600';
+        return { label: "未知", className: "bg-muted hover:bg-muted text-muted-foreground" };
     }
   };
 
   const formatUptime = (seconds) => {
-    if (!seconds) return 'N/A';
+    if (!seconds) return "N/A";
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    if (days > 0) return `${days}天 ${hours}小时`;
+    const secs = seconds % 60;
+    if (days > 0) return `${days}天 ${hours}小时 ${minutes}分钟`;
     if (hours > 0) return `${hours}小时 ${minutes}分钟`;
-    return `${minutes}分钟`;
+    if (minutes > 0) return `${minutes}分钟 ${secs}秒`;
+    return `${secs}秒`;
   };
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-40" />
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-4 w-64" />
+          </div>
           <div className="flex gap-2">
-            <Skeleton className="h-9 w-28" />
-            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-10 w-28" />
+            <Skeleton className="h-10 w-28" />
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-4 rounded-full" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-24" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">系统状态</h2>
-          <p className="text-sm text-muted-foreground">查看 Asterisk 运行状态并执行维护操作。</p>
-        </div>
+  const statusConfig = getStatusConfig(status?.status);
 
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-3xl font-bold tracking-tight">系统状态</h2>
+          <p className="text-sm text-muted-foreground">查看 Asterisk 运行状态并执行维护操作</p>
+        </div>
         <div className="flex gap-2">
-          <Button onClick={handleReload} disabled={reloading} variant="secondary">
-            {reloading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+          <Button onClick={handleReload} disabled={reloading} variant="outline" size="default">
+            {reloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             {reloading ? "重新加载中..." : "重新加载"}
           </Button>
-
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button disabled={restarting} variant="destructive">
-                {restarting ? <Loader2 className="animate-spin" /> : <Power />}
+              <Button disabled={restarting} variant="destructive" size="default">
+                {restarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Power className="mr-2 h-4 w-4" />}
                 {restarting ? "重启中..." : "重启"}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>重启 Asterisk？</AlertDialogTitle>
-                <AlertDialogDescription>
-                  这可能会中断正在进行的通话，并短暂影响注册与呼叫能力。
-                </AlertDialogDescription>
+                <AlertDialogDescription>这可能会中断正在进行的通话，并短暂影响注册与呼叫能力。</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
@@ -149,37 +160,49 @@ export default function Dashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader>
-            <CardDescription>状态</CardDescription>
-            <CardTitle className="capitalize">{status?.status || "unknown"}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">状态</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent />
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Badge className={statusConfig.className}>{statusConfig.label}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">系统运行状态</p>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardDescription>活动通道</CardDescription>
-            <CardTitle>{status?.channels || 0}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">活动通道</CardTitle>
+            <Phone className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent />
+          <CardContent>
+            <div className="text-2xl font-bold">{status?.channels || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">当前活跃的通话通道数</p>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardDescription>SIP 注册数</CardDescription>
-            <CardTitle>{status?.registrations || 0}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">SIP 注册数</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent />
+          <CardContent>
+            <div className="text-2xl font-bold">{status?.registrations || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">已注册的 SIP 终端数量</p>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardDescription>运行时间</CardDescription>
-            <CardTitle>
-              {status?.uptime ? `${Math.floor(status.uptime / 3600)}h` : "N/A"}
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">运行时间</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent />
+          <CardContent>
+            <div className="text-2xl font-bold">{status?.uptime ? formatUptime(status.uptime) : "N/A"}</div>
+            <p className="text-xs text-muted-foreground mt-1">系统持续运行时长</p>
+          </CardContent>
         </Card>
       </div>
     </div>

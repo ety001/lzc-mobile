@@ -1,28 +1,20 @@
 import axios from 'axios';
 
+// 从环境变量获取 API 基础地址，开发环境可以使用远程服务器
+// 如果 VITE_API_BASE_URL 为空，则使用相对路径（生产环境）
+const apiBaseURL = import.meta.env.VITE_API_BASE_URL 
+  ? `${import.meta.env.VITE_API_BASE_URL}/api/v1`
+  : '/api/v1';
+
 const api = axios.create({
-  baseURL: '/api/v1',
-  withCredentials: true, // 发送 cookie
+  baseURL: apiBaseURL,
+  withCredentials: true,
 });
 
-// 请求拦截器
-api.interceptors.request.use(
-  (config) => {
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// 响应拦截器
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // 未授权，重定向到登录页
       window.location.href = '/auth/login';
     }
     return Promise.reject(error);

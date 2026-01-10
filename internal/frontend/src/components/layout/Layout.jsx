@@ -1,22 +1,45 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { systemAPI } from "../services/system";
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
-
+import { Activity, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { systemAPI } from "@/services/system";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 function StatusIndicator({ status }) {
   const config = {
-    normal: { label: "normal", className: "bg-emerald-600 text-white hover:bg-emerald-600" },
-    restarting: { label: "restarting", className: "bg-amber-500 text-black hover:bg-amber-500" },
-    error: { label: "error", className: "bg-destructive text-destructive-foreground hover:bg-destructive" },
-    unknown: { label: "unknown", className: "bg-muted text-foreground hover:bg-muted" },
+    normal: {
+      label: "正常",
+      className: "bg-emerald-500 text-white hover:bg-emerald-500 border-emerald-500",
+      icon: CheckCircle2,
+    },
+    restarting: {
+      label: "重启中",
+      className: "bg-amber-500 text-white hover:bg-amber-500 border-amber-500",
+      icon: AlertCircle,
+    },
+    error: {
+      label: "错误",
+      className: "bg-destructive text-destructive-foreground hover:bg-destructive border-destructive",
+      icon: XCircle,
+    },
+    unknown: {
+      label: "未知",
+      className: "bg-muted text-muted-foreground hover:bg-muted border-muted",
+      icon: Activity,
+    },
   };
 
   const current = config[status] || config.unknown;
-  return <Badge className={current.className}>{current.label}</Badge>;
+  const Icon = current.icon;
+
+  return (
+    <Badge className={`${current.className} border flex items-center gap-1.5`} variant="outline">
+      <Icon className="h-3 w-3" />
+      {current.label}
+    </Badge>
+  );
 }
 
 export default function Layout() {
@@ -34,8 +57,7 @@ export default function Layout() {
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000); // 每 5 秒更新一次
-
+    const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -50,10 +72,11 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-background">
       <Toaster richColors position="top-right" />
-      <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
-        <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="font-semibold tracking-tight">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-6">
+            <Link to="/" className="flex items-center gap-2 font-bold text-lg tracking-tight hover:opacity-80 transition-opacity">
+              <Activity className="h-5 w-5" />
               懒猫通信
             </Link>
             <Separator orientation="vertical" className="h-6" />
@@ -61,26 +84,19 @@ export default function Layout() {
               {navItems.map((item) => {
                 const active = location.pathname === item.path;
                 return (
-                  <Button
-                    key={item.path}
-                    asChild
-                    variant={active ? "secondary" : "ghost"}
-                    size="sm"
-                  >
+                  <Button key={item.path} asChild variant={active ? "secondary" : "ghost"} size="sm" className={active ? "font-medium" : ""}>
                     <Link to={item.path}>{item.label}</Link>
                   </Button>
                 );
               })}
             </nav>
           </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <StatusIndicator status={status} />
           </div>
         </div>
       </header>
-
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <Outlet />
       </main>
     </div>
