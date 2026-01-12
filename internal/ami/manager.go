@@ -77,14 +77,33 @@ func (m *Manager) Init() error {
 // handleMessages 处理 AMI 消息
 func (m *Manager) handleMessages() {
 	for {
+		m.mu.RLock()
+		client := m.client
+		m.mu.RUnlock()
+
+		if client == nil {
+			// 如果客户端为 nil，尝试重新连接
+			if err := m.reconnect(); err != nil {
+				log.Printf("Failed to reconnect AMI: %v, retrying in 5s...", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			client = m.client
+		}
+
 		select {
-		case msg := <-m.client.Messages():
+		case msg := <-client.Messages():
 			if msg != nil {
 				m.processMessage(msg)
 			}
-		case err := <-m.client.Errors():
+		case err := <-client.Errors():
 			if err != nil {
 				log.Printf("AMI error: %v", err)
+				// 如果是连接错误，尝试重新连接
+				if err.Error() == "EOF" || err.Error() == "connection closed" {
+					log.Println("AMI connection lost, attempting to reconnect...")
+					m.reconnect()
+				}
 			}
 		}
 	}
@@ -103,6 +122,9 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 		if device != "" && number != "" && message != "" {
 			m.notifySMS(device, number, message)
 		}
+	case "FullyBooted":
+		// Asterisk 完全启动完成，状态会在 Client.handleMessage 中更新
+		log.Println("Asterisk fully booted event received")
 	}
 }
 
@@ -138,6 +160,48 @@ func (m *Manager) updateStatus() {
 
 	if client == nil {
 		return
+	}
+
+	// 如果状态是 restarting，尝试检测 Asterisk 是否已经启动完成
+	currentStatus := client.GetStatus()
+	if currentStatus == StatusRestarting {
+		// 检查重启超时（60秒）
+		client.mu.RLock()
+		restartTime := client.restartTime
+		client.mu.RUnlock()
+		
+		if restartTime != nil {
+			elapsed := time.Since(*restartTime)
+			if elapsed > 60*time.Second {
+				// 超过60秒，强制恢复为 normal
+				log.Printf("Asterisk restart timeout (%.0f seconds), forcing status to normal", elapsed.Seconds())
+				client.mu.Lock()
+				client.status = StatusNormal
+				client.restartTime = nil
+				client.mu.Unlock()
+			} else {
+				// 尝试获取运行时间，如果成功说明 Asterisk 已经启动
+				uptime, err := client.GetUptime()
+				if err == nil && uptime >= 0 {
+					// Asterisk 已经启动，更新状态为 normal
+					log.Printf("Asterisk restart completed (detected via uptime check: %d seconds), updating status to normal", uptime)
+					client.mu.Lock()
+					client.status = StatusNormal
+					client.restartTime = nil
+					client.mu.Unlock()
+				}
+			}
+		} else {
+			// 没有重启时间记录，尝试获取运行时间
+			uptime, err := client.GetUptime()
+			if err == nil && uptime >= 0 {
+				// Asterisk 已经启动，更新状态为 normal
+				log.Printf("Asterisk restart completed (detected via uptime check: %d seconds), updating status to normal", uptime)
+				client.mu.Lock()
+				client.status = StatusNormal
+				client.mu.Unlock()
+			}
+		}
 	}
 
 	info, err := client.GetStatusInfo()
@@ -205,6 +269,44 @@ func (m *Manager) SendSMS(device, number, message string) error {
 		return ErrNotConnected
 	}
 	return m.client.SendSMS(device, number, message)
+}
+
+// reconnect 重新连接 AMI
+func (m *Manager) reconnect() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 关闭旧连接
+	if m.client != nil {
+		m.client.Close()
+		m.client = nil
+	}
+
+	// 重试连接 AMI，最多重试 10 次，每次间隔 2 秒
+	maxRetries := 10
+	retryInterval := 2 * time.Second
+
+	var client *Client
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		client, err = NewClient()
+		if err == nil {
+			break
+		}
+		if i < maxRetries-1 {
+			log.Printf("Failed to reconnect to AMI (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, err, retryInterval)
+			time.Sleep(retryInterval)
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	m.client = client
+	log.Println("AMI reconnected successfully")
+	return nil
 }
 
 // Close 关闭 AMI 管理器

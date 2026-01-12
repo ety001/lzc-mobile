@@ -67,6 +67,7 @@ export default function Layout() {
     { path: "/dongles", label: "Dongle" },
     { path: "/notifications", label: "通知" },
     { path: "/logs", label: "日志" },
+    { path: "/settings", label: "设置" },
   ];
 
   return (

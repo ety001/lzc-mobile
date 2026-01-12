@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { RefreshCw, Power, Loader2, Activity, Phone, Users, Clock } from "lucide-react";
 import { systemAPI } from "@/services/system";
@@ -23,12 +23,34 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [reloading, setReloading] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [restartDialogOpen, setRestartDialogOpen] = useState(false);
+  const restartCheckIntervalRef = useRef(null);
 
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // 清理重启检查的 interval
+  useEffect(() => {
+    return () => {
+      if (restartCheckIntervalRef.current) {
+        clearInterval(restartCheckIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // 当状态从 restarting 变为 normal 时，重置 restarting 状态
+  useEffect(() => {
+    if (status?.status === "normal" && restarting) {
+      if (restartCheckIntervalRef.current) {
+        clearInterval(restartCheckIntervalRef.current);
+        restartCheckIntervalRef.current = null;
+      }
+      setRestarting(false);
+    }
+  }, [status?.status, restarting]);
 
   const fetchStatus = async () => {
     try {
@@ -46,7 +68,10 @@ export default function Dashboard() {
     try {
       await systemAPI.reload();
       toast.success("Asterisk 配置已重新加载");
-      fetchStatus();
+      // 等待一下再刷新状态，确保配置已生效
+      setTimeout(() => {
+        fetchStatus();
+      }, 500);
     } catch (error) {
       toast.error("重新加载失败", { description: error.message });
     } finally {
@@ -55,15 +80,58 @@ export default function Dashboard() {
   };
 
   const handleRestart = async () => {
+    setRestartDialogOpen(false);
     setRestarting(true);
+    
+    // 清理之前的检查 interval（如果存在）
+    if (restartCheckIntervalRef.current) {
+      clearInterval(restartCheckIntervalRef.current);
+      restartCheckIntervalRef.current = null;
+    }
+    
     try {
       await systemAPI.restart();
       toast.success("Asterisk 重启已启动");
-      fetchStatus();
+      
+      // 重启后，状态会变成 "restarting"，需要持续检查直到恢复正常
+      restartCheckIntervalRef.current = setInterval(async () => {
+        try {
+          const response = await systemAPI.getStatus();
+          if (response.data.status === "normal") {
+            if (restartCheckIntervalRef.current) {
+              clearInterval(restartCheckIntervalRef.current);
+              restartCheckIntervalRef.current = null;
+            }
+            setRestarting(false);
+            toast.success("Asterisk 重启完成");
+            fetchStatus();
+          } else if (response.data.status === "error") {
+            if (restartCheckIntervalRef.current) {
+              clearInterval(restartCheckIntervalRef.current);
+              restartCheckIntervalRef.current = null;
+            }
+            setRestarting(false);
+            toast.error("Asterisk 重启后出现错误");
+            fetchStatus();
+          }
+        } catch (error) {
+          // 如果请求失败，可能是 Asterisk 正在重启，继续等待
+          console.log("Waiting for Asterisk to restart...");
+        }
+      }, 2000); // 每2秒检查一次
+
+      // 最多等待60秒
+      setTimeout(() => {
+        if (restartCheckIntervalRef.current) {
+          clearInterval(restartCheckIntervalRef.current);
+          restartCheckIntervalRef.current = null;
+        }
+        setRestarting(false);
+        fetchStatus();
+      }, 60000);
     } catch (error) {
-      toast.error("重启失败", { description: error.message });
-    } finally {
       setRestarting(false);
+      toast.error("重启失败", { description: error.message });
     }
   };
 
@@ -137,11 +205,11 @@ export default function Dashboard() {
             {reloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             {reloading ? "重新加载中..." : "重新加载"}
           </Button>
-          <AlertDialog>
+          <AlertDialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
             <AlertDialogTrigger asChild>
-              <Button disabled={restarting} variant="destructive" size="default">
-                {restarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Power className="mr-2 h-4 w-4" />}
-                {restarting ? "重启中..." : "重启"}
+              <Button disabled={restarting || status?.status === "restarting"} variant="destructive" size="default">
+                {restarting || status?.status === "restarting" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Power className="mr-2 h-4 w-4" />}
+                {restarting || status?.status === "restarting" ? "重启中..." : "重启"}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>

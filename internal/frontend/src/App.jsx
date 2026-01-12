@@ -5,6 +5,7 @@ import Extensions from "./pages/Extensions";
 import Dongles from "./pages/Dongles";
 import Notifications from "./pages/Notifications";
 import Logs from "./pages/Logs";
+import Settings from "./pages/Settings";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="dongles" element={<Dongles />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="logs" element={<Logs />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

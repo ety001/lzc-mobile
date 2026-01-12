@@ -2,10 +2,14 @@ package notify
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/smtp"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/ety001/lzc-mobile/internal/database"
@@ -14,6 +18,55 @@ import (
 // Notifier 通知器接口
 type Notifier interface {
 	Send(message string) error
+}
+
+// getGlobalProxy 获取全局配置中的 HTTP 代理
+func getGlobalProxy() (string, error) {
+	var globalConfig database.GlobalConfig
+	if err := database.DB.FirstOrCreate(&globalConfig, database.GlobalConfig{ID: 1}).Error; err != nil {
+		return "", err
+	}
+	if globalConfig.HTTPProxy == "" {
+		return "", nil
+	}
+	return globalConfig.HTTPProxy, nil
+}
+
+// dialWithProxy 通过 HTTP 代理建立 TCP 连接
+func dialWithProxy(proxyURL, targetAddr string) (net.Conn, error) {
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid proxy URL: %w", err)
+	}
+
+	// 连接到代理服务器
+	conn, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to proxy: %w", err)
+	}
+
+	// 发送 HTTP CONNECT 请求
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", targetAddr, targetAddr)
+	if _, err := conn.Write([]byte(connectReq)); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to send CONNECT request: %w", err)
+	}
+
+	// 读取响应
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to read proxy response: %w", err)
+	}
+
+	response := string(buf[:n])
+	if !strings.HasPrefix(response, "HTTP/1.1 200") && !strings.HasPrefix(response, "HTTP/1.0 200") {
+		conn.Close()
+		return nil, fmt.Errorf("proxy CONNECT failed: %s", response)
+	}
+
+	return conn, nil
 }
 
 // SMTPNotifier SMTP 通知器
@@ -41,38 +94,233 @@ func (n *SMTPNotifier) Send(message string) error {
 		"\r\n" +
 		message + "\r\n")
 
-	if n.config.SMTPTLS {
-		// 使用 TLS
-		return smtp.SendMail(addr, auth, n.config.SMTPFrom, []string{n.config.SMTPTo}, msg)
+	// 检查是否使用代理
+	var proxyURL string
+	if n.config.UseProxy {
+		var err error
+		proxyURL, err = getGlobalProxy()
+		if err != nil {
+			return fmt.Errorf("failed to get proxy config: %w", err)
+		}
+		if proxyURL == "" {
+			return fmt.Errorf("proxy is enabled but not configured in global settings")
+		}
 	}
 
-	// 不使用 TLS（仅用于测试，生产环境建议使用 TLS）
-	client, err := smtp.Dial(addr)
+	// 根据端口和 TLS 配置判断使用哪种连接方式
+	// 465 端口：使用直接 TLS 连接
+	// 587 端口：使用 STARTTLS
+	// 25 端口：尝试使用 STARTTLS（现代服务器通常要求加密）
+	if n.config.SMTPPort == 465 {
+		// 465 端口：使用直接 TLS 连接
+		return n.sendWithDirectTLS(addr, auth, msg, proxyURL)
+	} else if n.config.SMTPTLS || n.config.SMTPPort == 587 || n.config.SMTPPort == 25 {
+		// 启用 TLS 或使用 587/25 端口：使用 STARTTLS
+		// 即使未明确启用 TLS，587 和 25 端口也尝试使用 STARTTLS（如果服务器支持）
+		return n.sendWithSTARTTLS(addr, auth, msg, proxyURL)
+	} else {
+		// 其他端口且未启用 TLS：尝试不使用 TLS（可能失败，因为很多服务器要求加密）
+		return n.sendWithoutTLS(addr, auth, msg, proxyURL)
+	}
+}
+
+// sendWithDirectTLS 使用直接 TLS 连接发送邮件（用于 465 端口）
+func (n *SMTPNotifier) sendWithDirectTLS(addr string, auth smtp.Auth, msg []byte, proxyURL string) error {
+	host := n.config.SMTPHost
+	if i := strings.LastIndex(addr, ":"); i > -1 {
+		host = addr[:i]
+	}
+
+	tlsConfig := &tls.Config{
+		ServerName:         host,
+		InsecureSkipVerify: false, // 生产环境应该验证证书
+	}
+
+	// 建立连接（通过代理或直接）
+	var conn net.Conn
+	var err error
+	if proxyURL != "" {
+		conn, err = dialWithProxy(proxyURL, addr)
+		if err != nil {
+			return fmt.Errorf("proxy dial failed: %w", err)
+		}
+		// 在代理连接上建立 TLS
+		conn = tls.Client(conn, tlsConfig)
+	} else {
+		conn, err = tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return fmt.Errorf("TLS dial failed: %w", err)
+		}
+	}
+	defer conn.Close()
+
+	// 创建 SMTP 客户端
+	client, err := smtp.NewClient(conn, host)
 	if err != nil {
-		return err
+		return fmt.Errorf("SMTP client creation failed: %w", err)
 	}
 	defer client.Close()
 
+	// 认证
 	if err = client.Auth(auth); err != nil {
-		return err
+		return fmt.Errorf("SMTP authentication failed: %w", err)
 	}
 
+	// 发送邮件
 	if err = client.Mail(n.config.SMTPFrom); err != nil {
-		return err
+		return fmt.Errorf("MAIL FROM failed: %w", err)
 	}
 
 	if err = client.Rcpt(n.config.SMTPTo); err != nil {
-		return err
+		return fmt.Errorf("RCPT TO failed: %w", err)
 	}
 
 	w, err := client.Data()
 	if err != nil {
-		return err
+		return fmt.Errorf("DATA command failed: %w", err)
+	}
+
+	_, err = w.Write(msg)
+	if err != nil {
+		return fmt.Errorf("writing message failed: %w", err)
+	}
+
+	if err = w.Close(); err != nil {
+		return fmt.Errorf("closing data writer failed: %w", err)
+	}
+
+	return client.Quit()
+}
+
+// sendWithSTARTTLS 使用 STARTTLS 发送邮件（用于 587 端口）
+func (n *SMTPNotifier) sendWithSTARTTLS(addr string, auth smtp.Auth, msg []byte, proxyURL string) error {
+	host := n.config.SMTPHost
+	if i := strings.LastIndex(addr, ":"); i > -1 {
+		host = addr[:i]
+	}
+
+	// 建立连接（通过代理或直接）
+	var client *smtp.Client
+	var err error
+	if proxyURL != "" {
+		conn, err := dialWithProxy(proxyURL, addr)
+		if err != nil {
+			return fmt.Errorf("proxy dial failed: %w", err)
+		}
+		client, err = smtp.NewClient(conn, host)
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("SMTP client creation failed: %w", err)
+		}
+	} else {
+		client, err = smtp.Dial(addr)
+		if err != nil {
+			return fmt.Errorf("SMTP dial failed: %w", err)
+		}
+	}
+	defer client.Close()
+
+	// 检查服务器是否支持 STARTTLS
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		tlsConfig := &tls.Config{
+			ServerName:         host,
+			InsecureSkipVerify: false, // 生产环境应该验证证书
+		}
+		if err = client.StartTLS(tlsConfig); err != nil {
+			return fmt.Errorf("STARTTLS failed: %w", err)
+		}
+	} else {
+		// 服务器不支持 STARTTLS
+		// 如果配置要求 TLS 或使用 587/25 端口，则返回错误
+		if n.config.SMTPTLS || n.config.SMTPPort == 587 || n.config.SMTPPort == 25 {
+			return fmt.Errorf("server does not support STARTTLS, but TLS is required for this port (%d)", n.config.SMTPPort)
+		}
+		// 否则继续使用未加密连接（不推荐）
+	}
+
+	// 认证
+	if err = client.Auth(auth); err != nil {
+		return fmt.Errorf("SMTP authentication failed: %w", err)
+	}
+
+	// 发送邮件
+	if err = client.Mail(n.config.SMTPFrom); err != nil {
+		return fmt.Errorf("MAIL FROM failed: %w", err)
+	}
+
+	if err = client.Rcpt(n.config.SMTPTo); err != nil {
+		return fmt.Errorf("RCPT TO failed: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("DATA command failed: %w", err)
+	}
+
+	_, err = w.Write(msg)
+	if err != nil {
+		return fmt.Errorf("writing message failed: %w", err)
+	}
+
+	if err = w.Close(); err != nil {
+		return fmt.Errorf("closing data writer failed: %w", err)
+	}
+
+	return client.Quit()
+}
+
+// sendWithoutTLS 不使用 TLS 发送邮件（不推荐）
+func (n *SMTPNotifier) sendWithoutTLS(addr string, auth smtp.Auth, msg []byte, proxyURL string) error {
+	host := n.config.SMTPHost
+	if i := strings.LastIndex(addr, ":"); i > -1 {
+		host = addr[:i]
+	}
+
+	// 建立连接（通过代理或直接）
+	var client *smtp.Client
+	var err error
+	if proxyURL != "" {
+		conn, err := dialWithProxy(proxyURL, addr)
+		if err != nil {
+			return fmt.Errorf("proxy dial failed: %w", err)
+		}
+		client, err = smtp.NewClient(conn, host)
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("SMTP client creation failed: %w", err)
+		}
+	} else {
+		client, err = smtp.Dial(addr)
+		if err != nil {
+			return fmt.Errorf("SMTP dial failed: %w", err)
+		}
+	}
+	defer client.Close()
+
+	if err = client.Auth(auth); err != nil {
+		return fmt.Errorf("SMTP authentication failed: %w", err)
+	}
+
+	if err = client.Mail(n.config.SMTPFrom); err != nil {
+		return fmt.Errorf("MAIL FROM failed: %w", err)
+	}
+
+	if err = client.Rcpt(n.config.SMTPTo); err != nil {
+		return fmt.Errorf("RCPT TO failed: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("DATA command failed: %w", err)
 	}
 	defer w.Close()
 
 	_, err = w.Write(msg)
-	return err
+	if err != nil {
+		return fmt.Errorf("writing message failed: %w", err)
+	}
+
+	return nil
 }
 
 // SlackNotifier Slack 通知器
@@ -107,7 +355,26 @@ func (n *SlackNotifier) Send(message string) error {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 配置 HTTP 客户端（支持代理）
+	transport := &http.Transport{}
+	if n.config.UseProxy {
+		proxyURL, err := getGlobalProxy()
+		if err != nil {
+			return fmt.Errorf("failed to get proxy config: %w", err)
+		}
+		if proxyURL != "" {
+			parsedProxyURL, err := url.Parse(proxyURL)
+			if err != nil {
+				return fmt.Errorf("invalid proxy URL: %w", err)
+			}
+			transport.Proxy = http.ProxyURL(parsedProxyURL)
+		}
+	}
+
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -137,7 +404,7 @@ func (n *TelegramNotifier) Send(message string) error {
 		return nil
 	}
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", n.config.TelegramBotToken)
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", n.config.TelegramBotToken)
 	payload := map[string]string{
 		"chat_id": n.config.TelegramChatID,
 		"text":    message,
@@ -148,14 +415,33 @@ func (n *TelegramNotifier) Send(message string) error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 配置 HTTP 客户端（支持代理）
+	transport := &http.Transport{}
+	if n.config.UseProxy {
+		proxyURL, err := getGlobalProxy()
+		if err != nil {
+			return fmt.Errorf("failed to get proxy config: %w", err)
+		}
+		if proxyURL != "" {
+			parsedProxyURL, err := url.Parse(proxyURL)
+			if err != nil {
+				return fmt.Errorf("invalid proxy URL: %w", err)
+			}
+			transport.Proxy = http.ProxyURL(parsedProxyURL)
+		}
+	}
+
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -217,7 +503,26 @@ func (n *WebhookNotifier) Send(message string) error {
 		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 配置 HTTP 客户端（支持代理）
+	transport := &http.Transport{}
+	if n.config.UseProxy {
+		proxyURL, err := getGlobalProxy()
+		if err != nil {
+			return fmt.Errorf("failed to get proxy config: %w", err)
+		}
+		if proxyURL != "" {
+			parsedProxyURL, err := url.Parse(proxyURL)
+			if err != nil {
+				return fmt.Errorf("invalid proxy URL: %w", err)
+			}
+			transport.Proxy = http.ProxyURL(parsedProxyURL)
+		}
+	}
+
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Settings2 } from "lucide-react";
+import { Settings2, TestTube, Loader2 } from "lucide-react";
 import { notificationsAPI } from "@/services/notifications";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,8 +25,10 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [open, setOpen] = useState(false);
+  const [testing, setTesting] = useState(null);
   const [formData, setFormData] = useState({
     enabled: false,
+    use_proxy: false,
     smtp_host: "",
     smtp_port: 587,
     smtp_user: "",
@@ -63,6 +65,7 @@ export default function Notifications() {
     setOpen(true);
     setFormData({
       enabled: config.enabled || false,
+      use_proxy: config.use_proxy || false,
       smtp_host: config.smtp_host || "",
       smtp_port: config.smtp_port || 587,
       smtp_user: config.smtp_user || "",
@@ -89,6 +92,22 @@ export default function Notifications() {
       toast.success("配置保存成功");
     } catch (error) {
       toast.error("保存失败", { description: error.response?.data?.error || error.message });
+    }
+  };
+
+  const handleTest = async (channel) => {
+    setTesting(channel);
+    try {
+      const response = await notificationsAPI.test(channel);
+      if (response.data.success) {
+        toast.success("测试消息发送成功");
+      } else {
+        toast.error("测试失败", { description: response.data.error || "未知错误" });
+      }
+    } catch (error) {
+      toast.error("测试失败", { description: error.response?.data?.error || error.message });
+    } finally {
+      setTesting(null);
     }
   };
 
@@ -129,6 +148,21 @@ export default function Notifications() {
                   <Badge variant={enabled ? "default" : "secondary"} className={enabled ? "bg-emerald-500 text-white hover:bg-emerald-500" : ""}>
                     {enabled ? "已启用" : "未启用"}
                   </Badge>
+                  {enabled && (
+                    <Button variant="outline" onClick={() => handleTest(channel.value)} size="sm" disabled={testing === channel.value}>
+                      {testing === channel.value ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          测试中...
+                        </>
+                      ) : (
+                        <>
+                          <TestTube className="mr-2 h-4 w-4" />
+                          测试
+                        </>
+                      )}
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => handleEdit(channel.value)} size="sm">
                     <Settings2 className="mr-2 h-4 w-4" />
                     配置
@@ -163,6 +197,14 @@ export default function Notifications() {
                 <div className="text-sm text-muted-foreground">启用后短信会转发到该渠道</div>
               </div>
               <Switch checked={formData.enabled} onCheckedChange={(checked) => setFormData({ ...formData, enabled: checked })} />
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/50">
+              <div className="space-y-0.5">
+                <div className="font-medium">使用 HTTP 代理</div>
+                <div className="text-sm text-muted-foreground">使用全局配置的 HTTP 代理服务器发送通知</div>
+              </div>
+              <Switch checked={formData.use_proxy} onCheckedChange={(checked) => setFormData({ ...formData, use_proxy: checked })} />
             </div>
 
             {editing === "smtp" && (

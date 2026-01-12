@@ -14,12 +14,15 @@ import (
 
 // Client AMI 客户端
 type Client struct {
-	conn   net.Conn
-	client *goami2.Client
-	mu     sync.RWMutex
-	status Status
-	errCh  chan error
-	msgCh  chan *goami2.Message
+	conn        net.Conn
+	client      *goami2.Client
+	mu          sync.RWMutex
+	status      Status
+	restartTime *time.Time // 记录重启开始时间
+	errCh       chan error
+	msgCh       chan *goami2.Message
+	responseChs map[string]chan *goami2.Message
+	responseMu  sync.RWMutex
 }
 
 // Status Asterisk 状态
@@ -81,11 +84,12 @@ func NewClient() (*Client, error) {
 	}
 
 	c := &Client{
-		conn:   conn,
-		client: client,
-		status: StatusUnknown,
-		errCh:  make(chan error, 10),
-		msgCh:  make(chan *goami2.Message, 100),
+		conn:        conn,
+		client:      client,
+		status:      StatusUnknown,
+		errCh:       make(chan error, 10),
+		msgCh:       make(chan *goami2.Message, 100),
+		responseChs: make(map[string]chan *goami2.Message),
 	}
 
 	// 启动消息监听
@@ -118,7 +122,10 @@ func (c *Client) listen() {
 				if errors.Is(err, goami2.ErrEOF) {
 					log.Println("AMI connection closed")
 					c.mu.Lock()
-					c.status = StatusError
+					// 如果当前状态是 restarting，保持为 restarting，否则设置为 error
+					if c.status != StatusRestarting {
+						c.status = StatusError
+					}
 					c.mu.Unlock()
 					return
 				}
@@ -131,6 +138,29 @@ func (c *Client) listen() {
 
 // handleMessage 处理收到的 AMI 消息
 func (c *Client) handleMessage(msg *goami2.Message) {
+	// 检查是否是等待的响应
+	actionID := msg.Field("ActionID")
+	if actionID != "" {
+		c.responseMu.RLock()
+		responseCh, exists := c.responseChs[actionID]
+		c.responseMu.RUnlock()
+
+		if exists {
+			// 发送到响应通道
+			select {
+			case responseCh <- msg:
+			default:
+				// 通道已满，丢弃消息
+			}
+			// 清理响应通道
+			c.responseMu.Lock()
+			delete(c.responseChs, actionID)
+			close(responseCh)
+			c.responseMu.Unlock()
+			return
+		}
+	}
+
 	// 将消息发送到消息通道
 	select {
 	case c.msgCh <- msg:
@@ -145,12 +175,22 @@ func (c *Client) handleMessage(msg *goami2.Message) {
 	case "FullyBooted":
 		log.Println("Asterisk fully booted")
 		c.mu.Lock()
-		c.status = StatusNormal
+		// 如果当前状态是 restarting，则恢复为 normal
+		if c.status == StatusRestarting {
+			c.status = StatusNormal
+			c.restartTime = nil
+			log.Println("Asterisk restart completed, status updated to normal")
+		} else {
+			c.status = StatusNormal
+		}
 		c.mu.Unlock()
 	case "Shutdown":
 		log.Println("Asterisk shutdown")
 		c.mu.Lock()
-		c.status = StatusError
+		// 如果当前状态是 restarting，保持为 restarting（因为这是预期的）
+		if c.status != StatusRestarting {
+			c.status = StatusError
+		}
 		c.mu.Unlock()
 	}
 }
@@ -181,20 +221,32 @@ func (c *Client) SendAction(action *goami2.Message) error {
 
 // Reload 重新加载 Asterisk 配置
 func (c *Client) Reload() error {
+	// 先执行 CoreReload 重新加载所有配置
 	action := goami2.NewAction("CoreReload")
 	action.AddActionID()
+	if err := c.SendAction(action); err != nil {
+		return err
+	}
 
-	return c.SendAction(action)
+	// 然后显式 reload SIP 配置，确保 SIP 用户配置被重新加载
+	sipAction := goami2.NewAction("Command")
+	sipAction.SetField("Command", "sip reload")
+	sipAction.AddActionID()
+	return c.SendAction(sipAction)
 }
 
 // Restart 重启 Asterisk
 func (c *Client) Restart() error {
 	c.mu.Lock()
 	c.status = StatusRestarting
+	now := time.Now()
+	c.restartTime = &now
 	c.mu.Unlock()
 
-	action := goami2.NewAction("CoreRestart")
-	action.SetField("Module", "")
+	// 使用 Command 动作执行 CLI 命令来重启 Asterisk
+	// CoreRestart 可能不会真正重启，使用 CLI 命令更可靠
+	action := goami2.NewAction("Command")
+	action.SetField("Command", "core restart now")
 	action.AddActionID()
 
 	return c.SendAction(action)
@@ -236,7 +288,7 @@ func (c *Client) GetStatusInfo() (*StatusInfo, error) {
 	}
 
 	// 获取运行时间
-	if uptime, err := c.getUptime(); err == nil {
+	if uptime, err := c.GetUptime(); err == nil {
 		info.Uptime = uptime
 	}
 
@@ -273,18 +325,63 @@ func (c *Client) getRegistrationCount() (int, error) {
 	return 0, nil
 }
 
-// getUptime 获取运行时间（秒）
-func (c *Client) getUptime() (int64, error) {
+// GetUptime 获取运行时间（秒）
+func (c *Client) GetUptime() (int64, error) {
 	action := goami2.NewAction("CoreStatus")
 	action.AddActionID()
+	actionID := action.Field("ActionID")
 
+	// 创建响应通道
+	responseCh := make(chan *goami2.Message, 1)
+	c.responseMu.Lock()
+	c.responseChs[actionID] = responseCh
+	c.responseMu.Unlock()
+
+	// 确保清理响应通道（如果超时，通道还未被 handleMessage 关闭）
+	defer func() {
+		c.responseMu.Lock()
+		if _, exists := c.responseChs[actionID]; exists {
+			// 如果通道还在 map 中，说明超时了，需要关闭通道
+			delete(c.responseChs, actionID)
+			close(responseCh)
+		}
+		c.responseMu.Unlock()
+	}()
+
+	// 发送动作
 	if err := c.SendAction(action); err != nil {
 		return 0, err
 	}
 
-	// 简化实现：实际应该解析 CoreStatus 响应
-	// 这里先返回 0，后续可以通过响应解析来更新
-	return 0, nil
+	// 等待响应，最多等待 5 秒
+	select {
+	case msg := <-responseCh:
+		// 检查响应状态
+		if msg.Field("Response") != "Success" {
+			return 0, fmt.Errorf("CoreStatus action failed: %s", msg.Field("Message"))
+		}
+
+		// 解析启动日期和时间
+		startupDate := msg.Field("CoreStartupDate")
+		startupTime := msg.Field("CoreStartupTime")
+
+		if startupDate == "" || startupTime == "" {
+			return 0, fmt.Errorf("missing startup date or time in response")
+		}
+
+		// 解析启动时间
+		startupStr := startupDate + " " + startupTime
+		startup, err := time.Parse("2006-01-02 15:04:05", startupStr)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse startup time: %w", err)
+		}
+
+		// 计算运行时间（秒）
+		uptime := time.Since(startup).Seconds()
+		return int64(uptime), nil
+	case <-time.After(5 * time.Second):
+		return 0, fmt.Errorf("timeout waiting for CoreStatus response")
+	}
 }
 
 // Messages 返回消息通道

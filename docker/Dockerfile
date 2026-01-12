@@ -1,16 +1,28 @@
 # 阶段一：构建 Go 应用
-FROM golang:1.25-bookworm AS go-builder
+# 使用 debian:11 作为基础镜像，手动安装 Go 1.25，确保 GLIBC 版本与最终镜像完全一致
+FROM debian:11 AS go-builder
 
 WORKDIR /build
 
+# 安装构建依赖和 Go 1.25
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    wget \
     git \
     gcc \
     libc6-dev \
-    libsqlite3-dev && \
+    libsqlite3-dev \
+    ca-certificates && \
+    wget -O go.tar.gz https://go.dev/dl/go1.25.5.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go.tar.gz && \
+    rm go.tar.gz && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# 设置 Go 环境变量
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOPATH=/go
+ENV CGO_ENABLED=1
 
 # 复制 go mod 文件
 COPY go.mod go.sum ./
@@ -21,14 +33,14 @@ RUN go mod download
 # 复制源代码
 COPY . .
 
-# 构建 Go 应用（启用 CGO，在 Debian 下使用动态链接，与最终镜像兼容）
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o bin/webpanel ./cmd/webpanel
+# 构建 Go 应用（启用 CGO，在 Debian 11 下使用动态链接，与最终镜像兼容）
+RUN go build -a -installsuffix cgo -o bin/webpanel ./cmd/webpanel
 
 
 
 
 # 阶段二：构建前端
-FROM node:20-alpine3.23 AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /build
 

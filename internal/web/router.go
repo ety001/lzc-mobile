@@ -65,6 +65,7 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		{
 			notifications.GET("", r.listNotificationConfigs)
 			notifications.PUT("/:channel", r.updateNotificationConfig)
+			notifications.POST("/:channel/test", r.testNotificationConfig)
 		}
 
 		// 系统状态
@@ -80,6 +81,13 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		{
 			logs.GET("", r.getLogs)
 			logs.GET("/stream", r.streamLogs)
+		}
+
+		// 全局配置
+		settings := api.Group("/settings")
+		{
+			settings.GET("", r.getGlobalConfig)
+			settings.PUT("", r.updateGlobalConfig)
 		}
 	}
 
