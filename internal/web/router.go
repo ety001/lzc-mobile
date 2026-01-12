@@ -91,4 +91,16 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		}
 	}
 
+	// SPA 路由 fallback：所有未匹配的路由都返回 index.html
+	// 但排除 API 和认证路径
+	engine.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		// 如果是 API 或认证路径，返回 404
+		if (len(path) >= 5 && path[:5] == "/api/") || (len(path) >= 6 && path[:6] == "/auth/") {
+			c.JSON(404, gin.H{"error": "Not found"})
+			return
+		}
+		// 其他路径返回 index.html（SPA 路由）
+		c.File("./web/dist/index.html")
+	})
 }
