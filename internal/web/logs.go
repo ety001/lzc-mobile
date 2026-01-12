@@ -2,10 +2,13 @@ package web
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,19 +16,40 @@ import (
 // getLogs 获取最近的日志（最近 N 行）
 func (r *Router) getLogs(c *gin.Context) {
 	logPath := os.Getenv("ASTERISK_LOG_PATH")
+
+	// 如果环境变量设置了但文件不存在，或者环境变量未设置，则自动检测
+	if logPath != "" {
+		// 检查环境变量指定的文件是否存在
+		if _, err := os.Stat(logPath); os.IsNotExist(err) {
+			logPath = "" // 文件不存在，重置为空，使用自动检测
+		}
+	}
+
 	if logPath == "" {
-		logPath = "/var/log/asterisk/full"
+		// 自动检测：优先使用 messages 文件
+		if _, err := os.Stat("/var/log/asterisk/messages"); err == nil {
+			logPath = "/var/log/asterisk/messages"
+		} else if _, err := os.Stat("/var/log/asterisk/full"); err == nil {
+			logPath = "/var/log/asterisk/full"
+		} else {
+			// 如果两个文件都不存在，默认使用 messages
+			logPath = "/var/log/asterisk/messages"
+		}
 	}
 
 	lines := 100 // 默认返回最近 100 行
 	if linesParam := c.Query("lines"); linesParam != "" {
-		// 这里简化处理，实际应该解析 lines 参数
-		// TODO: 解析 linesParam 并设置 lines
+		// 解析 lines 参数
+		if parsedLines, err := strconv.Atoi(linesParam); err == nil && parsedLines > 0 {
+			lines = parsedLines
+		}
 	}
 
 	file, err := os.Open(logPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open log file"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Failed to open log file: %s", err.Error()),
+		})
 		return
 	}
 	defer file.Close()
@@ -55,13 +79,32 @@ func (r *Router) getLogs(c *gin.Context) {
 // streamLogs 流式传输日志（SSE）
 func (r *Router) streamLogs(c *gin.Context) {
 	logPath := os.Getenv("ASTERISK_LOG_PATH")
+
+	// 如果环境变量设置了但文件不存在，或者环境变量未设置，则自动检测
+	if logPath != "" {
+		// 检查环境变量指定的文件是否存在
+		if _, err := os.Stat(logPath); os.IsNotExist(err) {
+			logPath = "" // 文件不存在，重置为空，使用自动检测
+		}
+	}
+
 	if logPath == "" {
-		logPath = "/var/log/asterisk/full"
+		// 自动检测：优先使用 messages 文件
+		if _, err := os.Stat("/var/log/asterisk/messages"); err == nil {
+			logPath = "/var/log/asterisk/messages"
+		} else if _, err := os.Stat("/var/log/asterisk/full"); err == nil {
+			logPath = "/var/log/asterisk/full"
+		} else {
+			// 如果两个文件都不存在，默认使用 messages
+			logPath = "/var/log/asterisk/messages"
+		}
 	}
 
 	file, err := os.Open(logPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open log file"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Failed to open log file: %s", err.Error()),
+		})
 		return
 	}
 	defer file.Close()
@@ -70,28 +113,46 @@ func (r *Router) streamLogs(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 
 	// 移动到文件末尾
+	fileInfo, err := file.Stat()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get file info"})
+		return
+	}
 	file.Seek(0, io.SeekEnd)
+	lastPos := fileInfo.Size()
 
-	// 使用 bufio.Scanner 读取新行
-	scanner := bufio.NewScanner(file)
+	// 使用轮询方式读取新行（简化实现）
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		// 检查客户端是否断开连接
-		if c.Request.Context().Err() != nil {
-			break
-		}
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-ticker.C:
+			// 检查文件是否有新内容
+			fileInfo, err := file.Stat()
+			if err != nil {
+				return
+			}
 
-		// 尝试读取新行
-		if scanner.Scan() {
-			line := scanner.Text()
-			// 发送 SSE 格式的数据
-			c.Writer.WriteString("data: " + strings.ReplaceAll(line, "\n", "\\n") + "\n\n")
-			c.Writer.Flush()
-		} else {
-			// 如果没有新行，等待一下
-			// 这里简化实现，实际应该使用 fsnotify 监听文件变化
-			break
+			if fileInfo.Size() > lastPos {
+				// 读取新内容
+				file.Seek(lastPos, io.SeekStart)
+				scanner := bufio.NewScanner(file)
+				for scanner.Scan() {
+					line := scanner.Text()
+					// 发送 SSE 格式的数据
+					c.Writer.WriteString("data: " + strings.ReplaceAll(line, "\n", "\\n") + "\n\n")
+					c.Writer.Flush()
+				}
+				lastPos = fileInfo.Size()
+				file.Seek(0, io.SeekEnd)
+			}
 		}
 	}
 }
