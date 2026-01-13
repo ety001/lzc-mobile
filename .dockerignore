@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+.gitattributes
 
 # Documentation
 docs/
@@ -8,38 +9,23 @@ docs/
 !README.md
 
 # IDE
-.idea/
-.vscode/
+.vscode
+.idea
 *.swp
 *.swo
+*~
 
 # Build artifacts
 bin/
-*.exe
-*.test
-
-# Frontend
-internal/frontend/node_modules/
-internal/frontend/dist/
-internal/frontend/.gitignore
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-data.db
-
-# Logs
+dist/
 *.log
 
-# Environment files
-.env
-.env.local
+# Test files
+*_test.go
+test/
+tests/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Docker
-docker-compose.yml
-.dockerignore
+# Temporary files
+tmp/
+temp/
+*.tmp
