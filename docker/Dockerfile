@@ -168,6 +168,7 @@ RUN make samples DESTDIR=/tmp/asterisk-install
 FROM debian:13 AS quectel-builder
 
 # 安装构建依赖（与 asterisk-builder 类似，但只需要基本工具）
+# 注意：quectel 模块需要 sqlite3 开发库
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git \
@@ -176,6 +177,7 @@ RUN apt-get update && \
     libtool \
     build-essential \
     libasound2-dev \
+    libsqlite3-dev \
     ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
