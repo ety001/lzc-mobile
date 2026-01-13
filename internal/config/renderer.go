@@ -3,7 +3,6 @@ package config
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"text/template"
