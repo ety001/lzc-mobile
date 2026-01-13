@@ -219,16 +219,11 @@ func (r *Renderer) RenderAll() error {
 		return fmt.Errorf("failed to render quectel.conf: %w", err)
 	}
 
-	// 不渲染 stasis.conf，完全删除它
-	// Asterisk 16 版本中，即使 stasis.conf 存在但配置有问题，也会导致 Stasis 初始化失败
-	// 完全删除 stasis.conf 让 Asterisk 使用内置默认配置
-	stasisConfPath := filepath.Join(r.outputDir, "stasis.conf")
-	if _, err := os.Stat(stasisConfPath); err == nil {
-		if err := os.Remove(stasisConfPath); err != nil {
-			log.Printf("Warning: Failed to remove stasis.conf: %v", err)
-		} else {
-			log.Println("Removed stasis.conf to use default configuration")
-		}
+	// 渲染 stasis.conf（Asterisk 20 需要正确的配置）
+	// 使用 taskpool 配置（Asterisk 20.17.0+ 使用 taskpool 而不是 threadpool）
+	// 不包含 [declined_message_types] 部分以避免文档错误
+	if err := r.RenderTemplate("stasis.conf.tpl", "stasis.conf", nil); err != nil {
+		return fmt.Errorf("failed to render stasis.conf: %w", err)
 	}
 
 	return nil
