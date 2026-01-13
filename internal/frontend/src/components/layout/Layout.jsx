@@ -65,6 +65,7 @@ export default function Layout() {
     { path: "/", label: "仪表盘" },
     { path: "/extensions", label: "Extension" },
     { path: "/dongles", label: "Dongle" },
+    { path: "/sms", label: "短信" },
     { path: "/notifications", label: "通知" },
     { path: "/logs", label: "日志" },
     { path: "/settings", label: "设置" },

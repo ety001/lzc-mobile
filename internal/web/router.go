@@ -89,6 +89,15 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 			settings.GET("", r.getGlobalConfig)
 			settings.PUT("", r.updateGlobalConfig)
 		}
+
+		// SMS 管理
+		sms := api.Group("/sms")
+		{
+			sms.GET("", r.listSMSMessages)
+			sms.POST("/send", r.sendSMSDirect)   // 发送短信（通过 dongle_id）
+			sms.DELETE("/:id", r.deleteSMSMessage)
+			sms.DELETE("", r.deleteSMSMessages) // 批量删除
+		}
 	}
 
 	// SPA 路由 fallback：所有未匹配的路由都返回 index.html

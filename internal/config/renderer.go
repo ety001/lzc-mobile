@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -94,7 +95,7 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 	// 从环境变量加载 AMI 配置
 	data.AMIUsername = os.Getenv("ASTERISK_AMI_USERNAME")
 	if data.AMIUsername == "" {
-		data.AMIUsername = "admin"
+		return nil, fmt.Errorf("ASTERISK_AMI_USERNAME environment variable is required")
 	}
 	data.AMIPassword = os.Getenv("ASTERISK_AMI_PASSWORD")
 	if data.AMIPassword == "" {
@@ -213,9 +214,21 @@ func (r *Renderer) RenderAll() error {
 		return fmt.Errorf("failed to render extensions.conf: %w", err)
 	}
 
-	// 渲染 dongle.conf
-	if err := r.RenderTemplate("dongle.conf.tpl", "dongle.conf", data); err != nil {
-		return fmt.Errorf("failed to render dongle.conf: %w", err)
+	// 渲染 quectel.conf（使用 quectel 替代 dongle）
+	if err := r.RenderTemplate("quectel.conf.tpl", "quectel.conf", data); err != nil {
+		return fmt.Errorf("failed to render quectel.conf: %w", err)
+	}
+
+	// 不渲染 stasis.conf，完全删除它
+	// Asterisk 16 版本中，即使 stasis.conf 存在但配置有问题，也会导致 Stasis 初始化失败
+	// 完全删除 stasis.conf 让 Asterisk 使用内置默认配置
+	stasisConfPath := filepath.Join(r.outputDir, "stasis.conf")
+	if _, err := os.Stat(stasisConfPath); err == nil {
+		if err := os.Remove(stasisConfPath); err != nil {
+			log.Printf("Warning: Failed to remove stasis.conf: %v", err)
+		} else {
+			log.Println("Removed stasis.conf to use default configuration")
+		}
 	}
 
 	return nil

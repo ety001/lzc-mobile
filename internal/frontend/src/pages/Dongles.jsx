@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { MessageSquarePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { extensionsAPI } from "@/services/extensions";
 import { donglesAPI } from "@/services/dongles";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,10 +21,7 @@ export default function Dongles() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [open, setOpen] = useState(false);
-  const [smsOpen, setSmsOpen] = useState(false);
-  const [smsBindingId, setSmsBindingId] = useState(null);
   const [formData, setFormData] = useState({ dongle_id: "", extension_id: "", inbound: true, outbound: true });
-  const [smsData, setSmsData] = useState({ number: "", message: "" });
 
   const defaultForm = useMemo(() => ({ dongle_id: "", extension_id: "", inbound: true, outbound: true }), []);
 
@@ -73,18 +69,6 @@ export default function Dongles() {
     }
   };
 
-  const handleSendSMS = async (e) => {
-    e.preventDefault();
-    try {
-      await donglesAPI.sendSMS(smsBindingId, smsData);
-      toast.success("短信发送成功");
-      setSmsOpen(false);
-      setSmsBindingId(null);
-      setSmsData({ number: "", message: "" });
-    } catch (error) {
-      toast.error("发送失败", { description: error.response?.data?.error || error.message });
-    }
-  };
 
   if (loading) {
     return (
@@ -120,7 +104,9 @@ export default function Dongles() {
       <Card>
         <CardHeader>
           <CardTitle>绑定列表</CardTitle>
-          <CardDescription>Dongle → Extension 的路由关系</CardDescription>
+          <CardDescription>
+            Dongle → Extension 的路由关系。一个 dongle 可以绑定多个 extension，每个绑定可以独立配置来电/去电开关。
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -145,12 +131,22 @@ export default function Dongles() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  bindings.map((binding) => (
+                  bindings.map((binding) => {
+                    // 统计同一个 dongle 绑定了多少个 extension
+                    const sameDongleCount = bindings.filter(b => b.dongle_id === binding.dongle_id).length;
+                    return (
                     <TableRow key={binding.id} className="hover:bg-muted/50">
                       <TableCell className="font-medium">
-                        <Badge variant="outline" className="font-mono">
-                          {binding.dongle_id}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-mono">
+                            {binding.dongle_id}
+                          </Badge>
+                          {sameDongleCount > 1 && (
+                            <Badge variant="secondary" className="text-xs">
+                              {sameDongleCount} 个绑定
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary">{binding.extension?.username || "N/A"}</Badge>
@@ -171,10 +167,6 @@ export default function Dongles() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => { setSmsBindingId(binding.id); setSmsOpen(true); }} className="h-8">
-                            <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5" />
-                            发短信
-                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -226,7 +218,8 @@ export default function Dongles() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -243,8 +236,17 @@ export default function Dongles() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid gap-2">
               <Label htmlFor="dongle_id">Dongle ID</Label>
-              <Input id="dongle_id" required value={formData.dongle_id} disabled={!!editing} onChange={(e) => setFormData({ ...formData, dongle_id: e.target.value })} />
-              {editing && <p className="text-xs text-muted-foreground">编辑时不支持修改 Dongle ID</p>}
+              <Input 
+                id="dongle_id" 
+                required 
+                value={formData.dongle_id} 
+                disabled={!!editing} 
+                onChange={(e) => setFormData({ ...formData, dongle_id: e.target.value })} 
+                placeholder="例如: dongle0, dongle1"
+              />
+              <p className="text-xs text-muted-foreground">
+                {editing ? "编辑时不支持修改 Dongle ID" : "Quectel 设备 ID，格式为 quectel0、quectel1 等。提示：同一个 dongle 可以多次创建绑定，每次选择不同的 extension"}
+              </p>
             </div>
             <div className="grid gap-2">
               <Label>Extension</Label>
@@ -253,13 +255,25 @@ export default function Dongles() {
                   <SelectValue placeholder="选择 Extension" />
                 </SelectTrigger>
                 <SelectContent>
-                  {extensions.map((ext) => (
-                    <SelectItem key={ext.id} value={String(ext.id)}>
-                      {ext.username}
-                    </SelectItem>
-                  ))}
+                  {extensions.map((ext) => {
+                    // 检查该 extension 是否已经与当前 dongle_id 绑定（编辑时排除当前绑定）
+                    const isBound = bindings.some(
+                      (b) => b.dongle_id === formData.dongle_id && 
+                             b.extension_id === ext.id && 
+                             (!editing || b.id !== editing.id)
+                    );
+                    return (
+                      <SelectItem key={ext.id} value={String(ext.id)} disabled={false}>
+                        {ext.username}
+                        {isBound && <span className="ml-2 text-xs text-muted-foreground">(已绑定)</span>}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                一个 dongle 可以绑定多个 extension。如果 extension 已绑定，仍可重复绑定以创建新的绑定关系。
+              </p>
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
@@ -276,31 +290,6 @@ export default function Dongles() {
                 取消
               </Button>
               <Button type="submit">保存</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={smsOpen} onOpenChange={setSmsOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">发送短信</DialogTitle>
-            <DialogDescription>通过绑定的 dongle 发送短信</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSendSMS} className="space-y-5">
-            <div className="grid gap-2">
-              <Label htmlFor="sms-number">号码</Label>
-              <Input id="sms-number" required value={smsData.number} onChange={(e) => setSmsData({ ...smsData, number: e.target.value })} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="sms-message">消息</Label>
-              <Textarea id="sms-message" required rows={4} value={smsData.message} onChange={(e) => setSmsData({ ...smsData, message: e.target.value })} />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setSmsOpen(false); setSmsBindingId(null); setSmsData({ number: "", message: "" }); }}>
-                取消
-              </Button>
-              <Button type="submit">发送</Button>
             </DialogFooter>
           </form>
         </DialogContent>

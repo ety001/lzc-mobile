@@ -1,5 +1,17 @@
 [modules]
 autoload=yes
+
+; Disable all stasis-related modules to avoid initialization issues
+; The "Stasis initialization failed" error in Asterisk 16 is a known issue
+; Disabling these modules may prevent the error
+noload => res_stasis.so
+noload => app_stasis.so
+noload => res_stasis_answer.so
+noload => res_stasis_device_state.so
+noload => res_stasis_playback.so
+noload => res_stasis_recording.so
+noload => res_stasis_snoop.so
+noload => res_stasis_test.so
 ;
 ; Preload modules
 ;

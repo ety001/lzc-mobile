@@ -60,12 +60,13 @@ func (h *Handler) OnSMSReceived(device, number, message string) {
 		}
 	}
 
-	// 保存到数据库，标记为已推送
+	// 保存到数据库，标记为已推送，方向为 inbound（接收）
 	now := time.Now()
 	smsMessage := database.SMSMessage{
 		DongleID:    device,
 		PhoneNumber: number,
 		Content:     message,
+		Direction:   "inbound",
 		Pushed:      true,
 		PushedAt:    &now,
 	}

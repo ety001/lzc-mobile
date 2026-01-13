@@ -6,6 +6,7 @@ import Dongles from "./pages/Dongles";
 import Notifications from "./pages/Notifications";
 import Logs from "./pages/Logs";
 import Settings from "./pages/Settings";
+import SMS from "./pages/SMS";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="sms" element={<SMS />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

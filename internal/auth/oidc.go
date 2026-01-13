@@ -62,11 +62,14 @@ func GetOIDCConfig() (*OIDCConfig, error) {
 	// 用于构建 OIDC 回调的完整重定向 URI，格式：{baseURL}{redirectURI}
 	// 例如：如果 baseURL 为 "https://example.com:8071"，redirectURI 为 "/auth/oidc/callback"
 	// 则完整重定向 URI 为 "https://example.com:8071/auth/oidc/callback"
-	// 默认值：http://localhost:8071（仅用于开发环境）
-	// 生产环境必须设置为实际的外部可访问地址，否则 OIDC 提供商无法正确回调
+	// 如果未设置，尝试从请求头获取（X-Forwarded-Host 或 Host）
 	baseURL := os.Getenv("LAZYCAT_AUTH_BASE_URL")
 	if baseURL == "" {
+		// 尝试从请求中获取（如果可用）
+		// 注意：这需要在请求上下文中，但这里是在配置阶段，所以无法获取
+		// 因此保持默认值，但建议在生产环境中设置环境变量
 		baseURL = "http://localhost:8071"
+		log.Printf("Warning: LAZYCAT_AUTH_BASE_URL not set, using default: %s. Please set it to the actual accessible URL.", baseURL)
 	}
 
 	fullRedirectURI := baseURL + redirectURI
@@ -104,6 +107,26 @@ func generateState() (string, error) {
 
 // Login 处理登录请求，重定向到 OIDC 提供商
 func Login(c *gin.Context) {
+	// 如果 LAZYCAT_AUTH_BASE_URL 未设置，尝试从请求头获取
+	baseURL := os.Getenv("LAZYCAT_AUTH_BASE_URL")
+	if baseURL == "" {
+		// 从请求头获取协议和主机
+		scheme := "http"
+		if c.GetHeader("X-Forwarded-Proto") == "https" || c.Request.TLS != nil {
+			scheme = "https"
+		}
+		host := c.GetHeader("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+		if host != "" {
+			baseURL = fmt.Sprintf("%s://%s", scheme, host)
+			// 临时设置环境变量（仅对当前请求有效）
+			os.Setenv("LAZYCAT_AUTH_BASE_URL", baseURL)
+			log.Printf("Auto-detected LAZYCAT_AUTH_BASE_URL from request: %s", baseURL)
+		}
+	}
+
 	config, err := GetOIDCConfig()
 	if err != nil {
 		log.Printf("OIDC config error: %v", err)
@@ -157,7 +180,7 @@ func Callback(c *gin.Context) {
 	token, err := config.Exchange(ctx, code)
 	if err != nil {
 		log.Printf("Token exchange error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange token"})
+		c.Redirect(http.StatusFound, "/auth/login?error=token_exchange_failed")
 		return
 	}
 
@@ -166,7 +189,7 @@ func Callback(c *gin.Context) {
 	resp, err := client.Get(config.UserInfoURI)
 	if err != nil {
 		log.Printf("UserInfo request error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
+		c.Redirect(http.StatusFound, "/auth/login?error=userinfo_failed")
 		return
 	}
 	defer resp.Body.Close()

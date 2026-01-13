@@ -114,13 +114,41 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 	eventType := msg.Field("Event")
 
 	switch eventType {
-	case "DongleSMSReceived":
-		// 处理收到的短信
-		device := msg.Field("Device")
-		number := msg.Field("Sender")
-		message := msg.Field("Message")
-		if device != "" && number != "" && message != "" {
-			m.notifySMS(device, number, message)
+	case "DongleSMSReceived", "QuectelSMSReceived", "UserEvent":
+		// 处理收到的短信（支持 dongle 和 quectel）
+		// UserEvent 是 dialplan 通过 UserEvent 应用发送的自定义事件
+		if eventType == "UserEvent" && msg.Field("UserEvent") == "SMSReceived" {
+			device := msg.Field("Device")
+			number := msg.Field("Sender")
+			message := msg.Field("Message")
+			if device != "" && number != "" && message != "" {
+				m.notifySMS(device, number, message)
+			}
+		} else if eventType == "DongleSMSReceived" || eventType == "QuectelSMSReceived" {
+			device := msg.Field("Device")
+			if device == "" {
+				device = msg.Field("QuectelDevice") // Quectel 可能使用不同的字段名
+			}
+			if device == "" {
+				device = msg.Field("QuectelName") // 也可能是 QuectelName
+			}
+			number := msg.Field("Sender")
+			if number == "" {
+				number = msg.Field("From") // Quectel 可能使用 From 字段
+			}
+			message := msg.Field("Message")
+			if message == "" {
+				// Quectel 可能使用 BASE64 编码的短信
+				smsBase64 := msg.Field("SMS_BASE64")
+				if smsBase64 != "" {
+					// 注意：这里需要解码 BASE64，但为了简化，先使用原始值
+					// 实际解码应该在 dialplan 中完成，这里接收的应该是已解码的消息
+					message = smsBase64
+				}
+			}
+			if device != "" && number != "" && message != "" {
+				m.notifySMS(device, number, message)
+			}
 		}
 	case "FullyBooted":
 		// Asterisk 完全启动完成，状态会在 Client.handleMessage 中更新

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -48,12 +49,7 @@ func (r *Router) createDongleBinding(c *gin.Context) {
 		return
 	}
 
-	// 检查 DongleID 是否已存在
-	var existing database.DongleBinding
-	if err := database.DB.Where("dongle_id = ?", req.DongleID).First(&existing).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Dongle binding already exists"})
-		return
-	}
+	// 注意：一个 dongle 可以绑定多个 extension，所以不再检查唯一性
 
 	binding := database.DongleBinding{
 		DongleID:    req.DongleID,
@@ -182,6 +178,20 @@ func (r *Router) sendSMS(c *gin.Context) {
 	if err := amiManager.SendSMS(binding.DongleID, req.Number, req.Message); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send SMS: " + err.Error()})
 		return
+	}
+
+	// 保存发送的短信到数据库（方向为 outbound）
+	smsMessage := database.SMSMessage{
+		DongleID:    binding.DongleID,
+		PhoneNumber: req.Number,
+		Content:     req.Message,
+		Direction:   "outbound",
+		Pushed:      false, // 发送的短信不需要推送通知
+		PushedAt:    nil,
+	}
+	if err := database.DB.Create(&smsMessage).Error; err != nil {
+		// 记录错误但不影响响应
+		log.Printf("Error saving sent SMS to database: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "SMS sent successfully"})

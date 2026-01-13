@@ -252,11 +252,19 @@ func (c *Client) Restart() error {
 	return c.SendAction(action)
 }
 
-// SendSMS 通过 dongle 发送短信
+// SendSMS 通过 quectel 发送短信
 func (c *Client) SendSMS(device, number, message string) error {
-	// dongle 发送短信的命令格式：dongle send sms <device> <number> <message>
-	action := goami2.NewAction("Command")
-	action.SetField("Command", fmt.Sprintf("dongle send sms %s %s %s", device, number, message))
+	// Quectel 发送短信：使用 Originate 动作调用 dialplan
+	// dialplan 中会调用 QuectelSendSMS(device,number,message,validity,report,magicID)
+	action := goami2.NewAction("Originate")
+	action.SetField("Channel", fmt.Sprintf("Local/%s@quectel-sms", number))
+	action.SetField("Context", "quectel-sms")
+	action.SetField("Exten", number)
+	action.SetField("Priority", "1")
+	action.SetField("Async", "true")
+	// 设置变量传递给 dialplan
+	action.SetField("Variable", fmt.Sprintf("QUECTEL_DEVICE=%s", device))
+	action.SetField("Variable", fmt.Sprintf("SMS_MESSAGE=%s", message))
 	action.AddActionID()
 
 	return c.SendAction(action)

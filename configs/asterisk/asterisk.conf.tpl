@@ -14,12 +14,12 @@ astsbindir => /usr/sbin
 [options]
 verbose = 3
 debug = 0
-alwaysfork = yes
-nofork = no
+; alwaysfork = yes  ; 注释掉，与 Supervisor 管理冲突
+nofork = yes        ; 使用 nofork，让 Supervisor 管理进程
 quiet = no
 timestamp = yes
 execincludes = yes
-console = yes
+console = yes        ; 使用 console 模式，配合 nofork
 highpriority = yes
 initcrypto = yes
 nocolor = no
@@ -41,4 +41,5 @@ rungroup = asterisk
 astctlpermissions = 0660
 astctlowner = root
 astctlgroup = asterisk
-astctl = /var/run/asterisk/asterisk.ctl
+; 使用相对路径，避免路径重复问题
+astctl = asterisk.ctl

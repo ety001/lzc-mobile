@@ -33,19 +33,77 @@ exten => _X.,n(hangup),Hangup()
 exten => _X.,n(error),NoOp(Call failed: ${DIALSTATUS} - SIP peer ${EXTEN} not found or not registered)
 exten => _X.,n,Hangup()
 
+; Quectel 设备上下文：处理来电、短信、USSD
+; 注意：Quectel 模块默认使用 incoming-mobile 上下文，我们也定义它以确保兼容
+[incoming-mobile]
+; 处理收到的短信
+; 注意：Quectel 模块会通过 AMI 事件发送短信，这里记录到日志
+exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${BASE64_DECODE(${SMS_BASE64})})
+exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - ${CALLERID(num)}: ${BASE64_DECODE(${SMS_BASE64})}' >> /var/log/asterisk/sms.txt)
+; 通过 AMI UserEvent 通知 Go 程序处理短信（如果 AMI 事件不可用）
+exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},Message: ${BASE64_DECODE(${SMS_BASE64})})
+exten => sms,n,Hangup()
+
+; 处理收到的 USSD
+exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})})
+exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})}' >> /var/log/asterisk/ussd.txt)
+exten => ussd,n,Hangup()
+
+; 处理来电：路由到绑定的 extension
 {{range .DongleBindings}}
-; Dongle {{.DongleID}} 绑定到 Extension {{.Extension.Username}}
 {{if .Inbound}}
-; 来电路由：从 dongle 到 extension
-exten => _X.,1,NoOp(Incoming call from dongle {{.DongleID}} to extension {{.Extension.Username}})
-exten => _X.,n,Dial(SIP/{{.Extension.Username}},30)
-exten => _X.,n,Hangup()
+; Quectel {{.DongleID}} 来电路由到 Extension {{.Extension.Username}}
+exten => s,1,NoOp(Incoming call from quectel {{.DongleID}} to extension {{.Extension.Username}})
+exten => s,n,Dial(SIP/{{.Extension.Username}},30)
+exten => s,n,Hangup()
+{{end}}
 {{end}}
 
+; 默认来电处理（如果没有绑定）
+exten => s,1,NoOp(Incoming call from quectel but no extension binding)
+exten => s,n,Hangup()
+
+; Quectel 设备上下文：处理来电、短信、USSD（别名，用于兼容）
+[quectel-incoming]
+; 处理收到的短信
+; 注意：Quectel 模块会通过 AMI 事件发送短信，这里记录到日志
+exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${BASE64_DECODE(${SMS_BASE64})})
+exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - ${CALLERID(num)}: ${BASE64_DECODE(${SMS_BASE64})}' >> /var/log/asterisk/sms.txt)
+; 通过 AMI UserEvent 通知 Go 程序处理短信（如果 AMI 事件不可用）
+exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},Message: ${BASE64_DECODE(${SMS_BASE64})})
+exten => sms,n,Hangup()
+
+; 处理收到的 USSD
+exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})})
+exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})}' >> /var/log/asterisk/ussd.txt)
+exten => ussd,n,Hangup()
+
+; 处理来电：路由到绑定的 extension
+{{range .DongleBindings}}
+{{if .Inbound}}
+; Quectel {{.DongleID}} 来电路由到 Extension {{.Extension.Username}}
+exten => s,1,NoOp(Incoming call from quectel {{.DongleID}} to extension {{.Extension.Username}})
+exten => s,n,Dial(SIP/{{.Extension.Username}},30)
+exten => s,n,Hangup()
+{{end}}
+{{end}}
+
+; 默认来电处理（如果没有绑定）
+exten => s,1,NoOp(Incoming call from quectel but no extension binding)
+exten => s,n,Hangup()
+
+; 去电路由：从 extension 到 quectel
+{{range .DongleBindings}}
 {{if .Outbound}}
-; 去电路由：从 extension 到 dongle
-exten => {{.Extension.Username}},1,NoOp(Outgoing call from extension {{.Extension.Username}} to dongle {{.DongleID}})
-exten => {{.Extension.Username}},n,Dial(Dongle/{{.DongleID}}/${EXTEN:{{len .Extension.Username}}})
+; Extension {{.Extension.Username}} 通过 Quectel {{.DongleID}} 去电
+exten => {{.Extension.Username}},1,NoOp(Outgoing call from extension {{.Extension.Username}} via quectel {{.DongleID}} to ${EXTEN:{{len .Extension.Username}}})
+exten => {{.Extension.Username}},n,Dial(Quectel/{{.DongleID}}/${EXTEN:{{len .Extension.Username}}})
 exten => {{.Extension.Username}},n,Hangup()
 {{end}}
 {{end}}
+
+; Quectel 短信发送上下文（用于通过 AMI Originate 发送短信）
+[quectel-sms]
+exten => _X.,1,NoOp(Sending SMS via quectel: device=${QUECTEL_DEVICE}, number=${EXTEN}, message=${SMS_MESSAGE})
+exten => _X.,n,QuectelSendSMS(${QUECTEL_DEVICE},${EXTEN},${SMS_MESSAGE},1440,yes,"")
+exten => _X.,n,Hangup()

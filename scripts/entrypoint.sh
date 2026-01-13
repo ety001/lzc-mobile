@@ -26,7 +26,9 @@ fi
 export ASTERISK_AMI_HOST="${ASTERISK_AMI_HOST:-localhost}"
 export ASTERISK_AMI_PORT="${ASTERISK_AMI_PORT:-5038}"
 export LAZYCAT_AUTH_OIDC_REDIRECT_URI="${LAZYCAT_AUTH_OIDC_REDIRECT_URI:-/auth/oidc/callback}"
-export LAZYCAT_AUTH_BASE_URL="${LAZYCAT_AUTH_BASE_URL:-http://localhost:8071}"
+# LAZYCAT_AUTH_BASE_URL 应该从环境变量或请求头中获取，不再设置默认值
+# 如果未设置，代码会尝试从请求头自动检测
+# export LAZYCAT_AUTH_BASE_URL="${LAZYCAT_AUTH_BASE_URL:-http://localhost:8071}"
 
 # 创建必要的目录
 mkdir -p /var/lib/lzc-mobile

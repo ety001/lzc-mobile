@@ -36,29 +36,29 @@ const (
 
 // NotificationConfig 通知渠道配置
 type NotificationConfig struct {
-	ID      uint                `gorm:"primaryKey" json:"id"`
-	Channel NotificationChannel `gorm:"type:varchar(50);not null;uniqueIndex" json:"channel"` // 渠道类型
-	Enabled bool                `gorm:"default:false" json:"enabled"`                         // 是否启用
-	UseProxy bool               `gorm:"default:false" json:"use_proxy"`                        // 是否使用 HTTP 代理
+	ID       uint                `gorm:"primaryKey" json:"id"`
+	Channel  NotificationChannel `gorm:"type:varchar(50);not null;uniqueIndex" json:"channel"` // 渠道类型
+	Enabled  bool                `gorm:"default:false" json:"enabled"`                         // 是否启用
+	UseProxy bool                `gorm:"default:false" json:"use_proxy"`                       // 是否使用 HTTP 代理
 
 	// SMTP 配置
 	SMTPHost     string `gorm:"type:varchar(255)" json:"smtp_host"`     // SMTP 服务器地址
-	SMTPPort     int    `json:"smtp_port"`                               // SMTP 端口
+	SMTPPort     int    `json:"smtp_port"`                              // SMTP 端口
 	SMTPUser     string `gorm:"type:varchar(255)" json:"smtp_user"`     // SMTP 用户名
 	SMTPPassword string `gorm:"type:varchar(255)" json:"smtp_password"` // SMTP 密码
 	SMTPFrom     string `gorm:"type:varchar(255)" json:"smtp_from"`     // 发件人邮箱
-	SMTPTo       string `gorm:"type:varchar(255)" json:"smtp_to"`        // 收件人邮箱
-	SMTPTLS      bool   `gorm:"default:false" json:"smtp_tls"`            // 是否使用 TLS/SSL
+	SMTPTo       string `gorm:"type:varchar(255)" json:"smtp_to"`       // 收件人邮箱
+	SMTPTLS      bool   `gorm:"default:false" json:"smtp_tls"`          // 是否使用 TLS/SSL
 
 	// Slack 配置
 	SlackWebhookURL string `gorm:"type:varchar(500)" json:"slack_webhook_url"` // Slack Webhook URL
 
 	// Telegram 配置
 	TelegramBotToken string `gorm:"type:varchar(255)" json:"telegram_bot_token"` // Telegram Bot Token
-	TelegramChatID   string `gorm:"type:varchar(255)" json:"telegram_chat_id"`    // Telegram Chat ID
+	TelegramChatID   string `gorm:"type:varchar(255)" json:"telegram_chat_id"`   // Telegram Chat ID
 
 	// Webhook 配置
-	WebhookURL    string `gorm:"type:varchar(500)" json:"webhook_url"`             // Webhook URL
+	WebhookURL    string `gorm:"type:varchar(500)" json:"webhook_url"`                // Webhook URL
 	WebhookMethod string `gorm:"type:varchar(10);default:POST" json:"webhook_method"` // HTTP 方法
 	WebhookHeader string `gorm:"type:text" json:"webhook_header"`                     // 自定义请求头（JSON 格式）
 
@@ -89,27 +89,29 @@ type Extension struct {
 }
 
 // DongleBinding Dongle 来去电绑定关系
+// 注意：一个 dongle 可以绑定多个 extension（移除了 uniqueIndex）
 type DongleBinding struct {
-	ID          uint      `gorm:"primaryKey"`
-	DongleID    string    `gorm:"type:varchar(100);not null;uniqueIndex"` // Dongle 设备 ID（如 dongle0）
-	ExtensionID uint      `gorm:"not null;index"`                         // 关联的 Extension ID
-	Extension   Extension `gorm:"foreignKey:ExtensionID"`                 // 外键关联
-	Inbound     bool      `gorm:"default:true"`                           // 是否处理来电
-	Outbound    bool      `gorm:"default:true"`                           // 是否处理去电
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	DongleID    string    `gorm:"type:varchar(100);not null;index" json:"dongle_id"` // Dongle 设备 ID（如 quectel0）
+	ExtensionID uint      `gorm:"not null;index" json:"extension_id"`                // 关联的 Extension ID
+	Extension   Extension `gorm:"foreignKey:ExtensionID" json:"extension"`           // 外键关联
+	Inbound     bool      `gorm:"default:true" json:"inbound"`                       // 是否处理来电
+	Outbound    bool      `gorm:"default:true" json:"outbound"`                      // 是否处理去电
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // SMSMessage SMS 消息
 type SMSMessage struct {
-	ID          uint       `gorm:"primaryKey"`
-	DongleID    string     `gorm:"type:varchar(100);not null;index"` // Dongle 设备 ID（如 dongle0）
-	PhoneNumber string     `gorm:"type:varchar(50);not null;index"`  // 电话号码
-	Content     string     `gorm:"type:text;not null"`               // 短信内容
-	Pushed      bool       `gorm:"default:false;index"`              // 是否已推送
-	PushedAt    *time.Time // 推送时间
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	DongleID    string     `gorm:"type:varchar(100);not null;index" json:"dongle_id"`       // Dongle 设备 ID（如 quectel0）
+	PhoneNumber string     `gorm:"type:varchar(50);not null;index" json:"phone_number"`     // 电话号码
+	Content     string     `gorm:"type:text;not null" json:"content"`                       // 短信内容
+	Direction   string     `gorm:"type:varchar(10);default:inbound;index" json:"direction"` // 方向：inbound（接收）或 outbound（发送）
+	Pushed      bool       `gorm:"default:false;index" json:"pushed"`                       // 是否已推送
+	PushedAt    *time.Time `json:"pushed_at"`                                               // 推送时间
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // AutoMigrate 自动迁移所有表
