@@ -198,8 +198,10 @@ RUN git clone --depth 1 https://github.com/IchthysMaranatha/asterisk-chan-quecte
 
 # 构建 quectel 模块
 WORKDIR /tmp/asterisk-chan-quectel
+# 验证头文件位置
+RUN ls -la /usr/include/asterisk.h /usr/include/asterisk/ 2>&1 | head -5 || echo "Checking header files..."
 RUN ./bootstrap && \
-    ./configure --with-astversion=20 --with-asterisk=/usr/include/asterisk && \
+    ./configure --with-astversion=20 --with-asterisk=/usr/include && \
     make -j$(nproc) && \
     make install DESTDIR=/tmp/quectel-install
 
