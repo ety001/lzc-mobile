@@ -299,7 +299,13 @@ RUN mkdir -p /var/lib/lzc-mobile \
     /etc/asterisk \
     /var/log/asterisk \
     /var/run/asterisk \
-    /var/log/supervisor
+    /var/log/supervisor \
+    /var/lib/asterisk \
+    /var/spool/asterisk && \
+    chown -R asterisk:asterisk /var/lib/asterisk \
+    /var/log/asterisk \
+    /var/run/asterisk \
+    /var/spool/asterisk
 
 # 暴露端口
 # SIP TCP 端口（默认 5060）
