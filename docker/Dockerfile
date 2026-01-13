@@ -286,9 +286,11 @@ COPY configs/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# 创建 asterisk 用户和组（从源码编译时不会自动创建）
 # 将 asterisk 用户添加到 dialout 组，以便访问串口设备（ttyUSB）
-# dialout 组是 Linux 系统中串口设备的默认组
-RUN usermod -a -G dialout asterisk
+RUN groupadd -r asterisk && \
+    useradd -r -g asterisk -d /var/lib/asterisk -s /usr/sbin/nologin asterisk && \
+    usermod -a -G dialout asterisk
 
 # 创建必要的目录
 RUN mkdir -p /var/lib/lzc-mobile \
