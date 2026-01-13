@@ -138,7 +138,7 @@ RUN ./configure \
     --with-pjproject-bundled
 
 # 选择要编译的模块（优化编译时间）
-# 注意：Asterisk 20 中启用了 res_stasis 和 app_stasis，因为 Stasis 问题应该已修复
+# 注意：禁用 res_stasis 和 app_stasis 以避免初始化问题
 RUN make menuselect.makeopts && \
     menuselect/menuselect \
     --enable app_dial \
@@ -147,8 +147,8 @@ RUN make menuselect.makeopts && \
     --enable chan_iax2 \
     --enable res_musiconhold \
     --enable res_agi \
-    --enable res_stasis \
-    --enable app_stasis \
+    --disable res_stasis \
+    --disable app_stasis \
     menuselect.makeopts
 
 # 编译 Asterisk（这是最耗时的步骤，放在最后）
