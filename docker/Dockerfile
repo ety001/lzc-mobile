@@ -264,8 +264,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # 从 asterisk-builder 复制 Asterisk 二进制文件和库
+# 需要复制完整的 Asterisk 安装，包括所有共享库
 COPY --from=asterisk-builder /tmp/asterisk-install/usr/sbin/asterisk /usr/sbin/asterisk
 COPY --from=asterisk-builder /tmp/asterisk-install/usr/lib/asterisk /usr/lib/asterisk
+COPY --from=asterisk-builder /tmp/asterisk-install/usr/lib/libasterisk* /usr/lib/
 COPY --from=asterisk-builder /tmp/asterisk-install/etc/asterisk /etc/asterisk
 
 # 从 quectel-builder 复制 quectel 模块
