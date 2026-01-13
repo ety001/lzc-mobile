@@ -66,10 +66,9 @@ RUN sed -i 's|outDir:.*|outDir: "./dist",|' vite.config.js && pnpm build
 # 阶段三：构建 Asterisk 20（从源码编译）
 # 使用 ARG 定义版本，便于缓存和版本管理
 # 可以使用 asterisk-20-current.tar.gz 自动获取最新版本，或指定具体版本如 20.11.1
-ARG ASTERISK_SOURCE_URL=https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz
 FROM debian:13 AS asterisk-builder
 
-ARG ASTERISK_SOURCE_URL
+ARG ASTERISK_SOURCE_URL=https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz
 
 # 安装构建依赖（分离依赖安装，便于缓存）
 # 这些依赖不经常变化，可以很好地利用缓存
