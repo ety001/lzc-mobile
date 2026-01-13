@@ -234,7 +234,7 @@ RUN apt-get update && \
     libical3 \
     libspeex1 \
     libspeexdsp1 \
-    libcodec2-1.0 \
+    libcodec2-1.2 \
     libgsm1 \
     libmpg123-0 \
     libmp3lame0 \
@@ -243,15 +243,14 @@ RUN apt-get update && \
     libsrtp2-1 \
     libsndfile1 \
     libsamplerate0 \
-    libavcodec60 \
-    libavformat60 \
-    libswresample4 \
-    libavutil58 \
-    libavfilter9 \
-    libavdevice60 \
-    libavresample4 \
-    libpostproc57 \
-    libbluetooth1 \
+    libavcodec61 \
+    libavformat61 \
+    libswresample5 \
+    libavutil59 \
+    libavfilter10 \
+    libavdevice61 \
+    libpostproc58 \
+    libbluetooth3 \
     libcap2 \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
