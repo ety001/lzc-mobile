@@ -157,6 +157,9 @@ RUN make -j$(nproc)
 # 安装 Asterisk（但不安装到系统目录，而是安装到临时目录）
 RUN make install DESTDIR=/tmp/asterisk-install
 
+# 安装 Asterisk 头文件（quectel 模块需要）
+RUN make install-headers DESTDIR=/tmp/asterisk-install
+
 # 生成示例配置文件
 RUN make samples DESTDIR=/tmp/asterisk-install
 
@@ -183,8 +186,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # 从 asterisk-builder 复制 Asterisk 开发文件
+# 需要复制完整的 Asterisk 安装，包括头文件
 COPY --from=asterisk-builder /tmp/asterisk-install/usr /usr
 COPY --from=asterisk-builder /tmp/asterisk-install/etc /etc
+# Asterisk 头文件通常在 /usr/include/asterisk 目录
+# 确保头文件被正确复制（如果使用 DESTDIR，头文件应该在 /tmp/asterisk-install/usr/include/asterisk）
 
 # 下载 quectel 源码（分离下载步骤）
 WORKDIR /tmp
@@ -193,7 +199,7 @@ RUN git clone --depth 1 https://github.com/IchthysMaranatha/asterisk-chan-quecte
 # 构建 quectel 模块
 WORKDIR /tmp/asterisk-chan-quectel
 RUN ./bootstrap && \
-    ./configure --with-astversion=20 && \
+    ./configure --with-astversion=20 --with-asterisk=/usr/include/asterisk && \
     make -j$(nproc) && \
     make install DESTDIR=/tmp/quectel-install
 
