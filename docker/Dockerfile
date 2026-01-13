@@ -106,7 +106,6 @@ RUN apt-get update && \
     libavutil-dev \
     libavfilter-dev \
     libavdevice-dev \
-    libavresample-dev \
     libpostproc-dev \
     libbluetooth-dev \
     libcap-dev \
