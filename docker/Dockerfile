@@ -269,9 +269,8 @@ COPY --from=asterisk-builder /tmp/asterisk-install/usr/sbin/asterisk /usr/sbin/a
 COPY --from=asterisk-builder /tmp/asterisk-install/usr/lib/asterisk /usr/lib/asterisk
 COPY --from=asterisk-builder /tmp/asterisk-install/usr/lib/libasterisk* /usr/lib/
 COPY --from=asterisk-builder /tmp/asterisk-install/etc/asterisk /etc/asterisk
-# 复制文档文件（如果存在）
-COPY --from=asterisk-builder /tmp/asterisk-install/var/lib/asterisk/documentation /var/lib/asterisk/documentation
-COPY --from=asterisk-builder /tmp/asterisk-install/usr/share/asterisk /usr/share/asterisk
+# 复制文档文件（如果存在，使用通配符避免不存在时失败）
+COPY --from=asterisk-builder /tmp/asterisk-install/var/lib/asterisk/documentation* /var/lib/asterisk/
 
 # 从 quectel-builder 复制 quectel 模块
 COPY --from=quectel-builder /tmp/quectel-install/usr/lib/asterisk/modules/chan_quectel.so /usr/lib/asterisk/modules/chan_quectel.so
