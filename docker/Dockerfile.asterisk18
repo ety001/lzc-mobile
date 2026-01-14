@@ -269,7 +269,7 @@ COPY --from=asterisk-builder /tmp/asterisk-install/usr/lib/libasterisk* /usr/lib
 COPY --from=asterisk-builder /tmp/asterisk-install/etc/asterisk /etc/asterisk
 # 复制文档文件（如果存在，使用通配符避免不存在时失败）
 # Asterisk 18 可能也需要文档文件
-COPY --from=asterisk-builder /tmp/asterisk-install/var/lib/asterisk/documentation* /var/lib/asterisk/ || true
+COPY --from=asterisk-builder /tmp/asterisk-install/var/lib/asterisk/documentation* /var/lib/asterisk/
 
 # 从 quectel-builder 复制 quectel 模块
 COPY --from=quectel-builder /tmp/quectel-install/usr/lib/asterisk/modules/chan_quectel.so /usr/lib/asterisk/modules/chan_quectel.so
