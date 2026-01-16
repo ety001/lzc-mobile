@@ -203,7 +203,17 @@ func (r *Renderer) RenderAll() error {
 		return fmt.Errorf("failed to render manager.conf: %w", err)
 	}
 
-	// 渲染 sip.conf
+	// 渲染 logger.conf（日志轮转配置文件）
+	if err := r.RenderTemplate("logger.conf.tpl", "logger.conf", nil); err != nil {
+		return fmt.Errorf("failed to render logger.conf: %w", err)
+	}
+
+	// 渲染 pjsip.conf（PJSIP 配置文件，需要 SIP 配置和 Extensions）
+	if err := r.RenderTemplate("pjsip.conf.tpl", "pjsip.conf", data); err != nil {
+		return fmt.Errorf("failed to render pjsip.conf: %w", err)
+	}
+
+	// 渲染 sip.conf（保留兼容性，但不推荐使用）
 	if err := r.RenderTemplate("sip.conf.tpl", "sip.conf", data); err != nil {
 		return fmt.Errorf("failed to render sip.conf: %w", err)
 	}
