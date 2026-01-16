@@ -378,14 +378,24 @@ func (c *Client) GetUptime() (int64, error) {
 		}
 
 		// 解析启动时间
+		// 注意：Asterisk 返回的时间实际上是本地时间（而不是文档说的 UTC）
+		// 所以直接解析为本地时间即可
 		startupStr := startupDate + " " + startupTime
-		startup, err := time.Parse("2006-01-02 15:04:05", startupStr)
+		startup, err := time.ParseInLocation("2006-01-02 15:04:05", startupStr, time.Local)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse startup time: %w", err)
 		}
 
 		// 计算运行时间（秒）
 		uptime := time.Since(startup).Seconds()
+
+		// 如果运行时间为负数，说明系统时间可能有问题，返回0
+		if uptime < 0 {
+			log.Printf("Warning: negative uptime calculated: %f, startup time: %s, current time: %s",
+				uptime, startup.Format(time.RFC3339), time.Now().Format(time.RFC3339))
+			return 0, nil
+		}
+
 		return int64(uptime), nil
 	case <-time.After(5 * time.Second):
 		return 0, fmt.Errorf("timeout waiting for CoreStatus response")
