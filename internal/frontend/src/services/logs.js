@@ -8,5 +8,10 @@ const getApiBaseURL = () => {
 
 export const logsAPI = {
   get: (lines = 100) => api.get(`/logs?lines=${lines}`),
-  stream: () => new EventSource(`${getApiBaseURL()}/logs/stream`, { withCredentials: true }),
+  stream: (debug = false) => {
+    const url = debug
+      ? `${getApiBaseURL()}/logs/stream?debug=true`
+      : `${getApiBaseURL()}/logs/stream`;
+    return new EventSource(url, { withCredentials: true });
+  },
 };

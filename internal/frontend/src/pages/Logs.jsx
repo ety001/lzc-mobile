@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Play, Square, RefreshCw } from "lucide-react";
+import { Play, Square, RefreshCw, Bug } from "lucide-react";
 import { logsAPI } from "@/services/logs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 export default function Logs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [streaming, setStreaming] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugModeLocked, setDebugModeLocked] = useState(false);
   const logEndRef = useRef(null);
   const eventSourceRef = useRef(null);
 
@@ -44,16 +48,21 @@ export default function Logs() {
   const startStreaming = () => {
     if (streaming) return;
     setStreaming(true);
-    const eventSource = logsAPI.stream();
+    setDebugModeLocked(true);
+    setLogs([]);
+
+    const eventSource = logsAPI.stream(debugMode);
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
       const line = event.data.replace(/^data: /, "");
-      setLogs((prev) => [...prev.slice(-99), line]);
+      const maxLines = debugMode ? 199 : 99;
+      setLogs((prev) => [...prev.slice(-maxLines), line]);
     };
 
     eventSource.onerror = () => {
       setStreaming(false);
+      setDebugModeLocked(false);
       eventSource.close();
     };
   };
@@ -64,6 +73,7 @@ export default function Logs() {
       eventSourceRef.current = null;
     }
     setStreaming(false);
+    setDebugModeLocked(false);
   };
 
   if (loading) {
@@ -83,10 +93,30 @@ export default function Logs() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h2 className="text-3xl font-bold tracking-tight">日志查看</h2>
           <p className="text-sm text-muted-foreground">支持最近日志拉取与实时 SSE 流</p>
+          <div className="flex items-center gap-2 mt-2">
+            <Bug className="h-4 w-4 text-amber-500" />
+            <Label htmlFor="debug-mode" className="text-sm cursor-pointer">调试模式</Label>
+            <Switch
+              id="debug-mode"
+              checked={debugMode}
+              onCheckedChange={(checked) => {
+                if (streaming) {
+                  return;
+                }
+                setDebugMode(checked);
+              }}
+              disabled={streaming}
+            />
+            {debugMode && (
+              <Badge variant="outline" className="border-amber-500 text-amber-500">
+                DEBUG
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={fetchLogs} size="default">
@@ -112,9 +142,18 @@ export default function Logs() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>日志</CardTitle>
-              <CardDescription className="mt-1">{streaming ? "实时流已开启（最多保留最近 100 行）" : "显示最近 100 行"}</CardDescription>
+              <CardDescription className="mt-1">
+                {debugMode
+                  ? `调试模式：显示 asterisk -rvvvv 完整输出（最多保留最近 ${debugMode ? 200 : 100} 行）`
+                  : streaming
+                  ? "实时流已开启（最多保留最近 100 行）"
+                  : "显示最近 100 行"}
+              </CardDescription>
             </div>
-            {streaming && <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white animate-pulse">实时流</Badge>}
+            <div className="flex gap-2">
+              {streaming && <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white animate-pulse">实时流</Badge>}
+              {debugMode && <Badge variant="outline" className="border-amber-500 text-amber-500">DEBUG</Badge>}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
