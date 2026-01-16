@@ -43,6 +43,7 @@ lzc-mobile
 internal/frontend/dist/
 internal/frontend/node_modules/
 internal/frontend/package-lock.json
+web/dist/
 
 # Logs
 *.log
