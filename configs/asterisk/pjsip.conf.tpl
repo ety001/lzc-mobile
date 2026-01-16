@@ -70,7 +70,8 @@ aors = {{.Username}}
 {{if eq .Transport "tcp"}}transport = transport-tcp{{end}}
 {{if eq .Transport "udp"}}transport = transport-udp{{end}}
 {{if eq .Transport "tcp+udp"}}
-; Support both TCP and UDP - can be specified in client
-transport = transport-udp,transport-tcp
+; For tcp+udp, use UDP as primary transport (SIP standard)
+; TCP will still work if client explicitly uses TCP transport
+transport = transport-udp
 {{end}}
 {{end}}
