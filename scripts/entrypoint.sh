@@ -119,4 +119,4 @@ if [ ! -f /etc/asterisk/asterisk.conf ]; then
 fi
 
 # 启动 Supervisor（会管理 Asterisk 和 Web 面板）
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+exec /usr/bin/supervisord -c /etc/supervisord.conf
