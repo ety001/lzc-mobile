@@ -25,8 +25,8 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 	// 使用 gin-contrib/static 中间件，参考 turtle/router/router.go 的实现
 	// static.Serve 必须在所有路由之前注册
 	// 第二个参数 true 表示文件不存在时 fallback 到 index.html（SPA 模式）
-	// 使用相对路径 ./web/dist，因为主程序已经将工作目录设置为 /app
-	engine.Use(static.Serve("/", static.LocalFile("./web/dist", true)))
+	// 使用相对路径 ./dist，因为主程序已经将工作目录设置为 /app
+	engine.Use(static.Serve("/", static.LocalFile("./dist", true)))
 
 	// 认证路由（不需要认证）
 	authGroup := engine.Group("/auth")
@@ -110,6 +110,6 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 			return
 		}
 		// 其他路径返回 index.html（SPA 路由）
-		c.File("./web/dist/index.html")
+		c.File("./dist/index.html")
 	})
 }
