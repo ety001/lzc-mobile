@@ -83,7 +83,7 @@ type Extension struct {
 	Host      string    `gorm:"type:varchar(255);default:dynamic" json:"host"`          // 主机地址，默认 dynamic
 	Context   string    `gorm:"type:varchar(100);default:default" json:"context"`       // 上下文
 	Port      int       `json:"port"`                                                   // 端口（可选）
-	Transport string    `gorm:"type:varchar(10);default:tcp" json:"transport"`          // 传输协议，默认 tcp
+	Transport string    `gorm:"type:varchar(10);default:tcp+udp" json:"transport"`     // 传输协议：tcp+udp（推荐）、tcp、udp
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

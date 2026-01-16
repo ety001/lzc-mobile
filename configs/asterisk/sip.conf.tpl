@@ -1,13 +1,14 @@
 [general]
-; SIP 通用配置
+; SIP 通用配置（保留兼容性，建议使用 PJSIP）
 context=default
 allowguest=no
 allowoverlap=no
-udpbindaddr=0.0.0.0
+; 同时启用 UDP 和 TCP
+udpbindaddr={{.SIPHost}}:{{.SIPPort}}
 tcpbindaddr={{.SIPHost}}:{{.SIPPort}}
 tcpenable=yes
-udpenable=no
-transport=tcp
+udpenable=yes
+transport=udp
 srvlookup=no
 qualify=yes
 nat=force_rport,comedia

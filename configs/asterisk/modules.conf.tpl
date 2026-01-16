@@ -1,6 +1,14 @@
 [modules]
 autoload=yes
 
+; Enable PJSIP chan_pjsip driver (recommended over chan_sip)
+preload => res_pjsip.so
+preload => res_pjsip_pubsub.so
+preload => res_pjsip_session.so
+
+; Disable deprecated chan_sip
+noload => chan_sip.so
+
 ; Disable all stasis-related modules to avoid initialization issues
 ; Even in Asterisk 20, Stasis initialization can fail with "Cannot update type 'declined_message_types'"
 noload => res_stasis.so

@@ -234,6 +234,7 @@ export default function Extensions() {
                   <SelectValue placeholder="选择 Transport" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="tcp+udp">TCP+UDP（推荐）</SelectItem>
                   <SelectItem value="tcp">TCP</SelectItem>
                   <SelectItem value="udp">UDP</SelectItem>
                 </SelectContent>
