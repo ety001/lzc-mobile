@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
-import { Activity, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Activity, CheckCircle2, XCircle, AlertCircle, Terminal } from "lucide-react";
 import { systemAPI } from "@/services/system";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,7 @@ export default function Layout() {
     { path: "/sms", label: "短信" },
     { path: "/notifications", label: "通知" },
     { path: "/logs", label: "日志" },
+    { path: "/terminal", label: "调试工具" },
     { path: "/settings", label: "设置" },
   ];
 

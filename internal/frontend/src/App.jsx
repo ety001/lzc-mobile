@@ -7,6 +7,7 @@ import Notifications from "./pages/Notifications";
 import Logs from "./pages/Logs";
 import Settings from "./pages/Settings";
 import SMS from "./pages/SMS";
+import Terminal from "./pages/Terminal";
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
           <Route path="sms" element={<SMS />} />
+          <Route path="terminal" element={<Terminal />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

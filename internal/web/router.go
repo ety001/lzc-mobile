@@ -98,6 +98,9 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 			sms.DELETE("/:id", r.deleteSMSMessage)
 			sms.DELETE("", r.deleteSMSMessages) // 批量删除
 		}
+
+		// WebSocket 终端
+		api.GET("/terminal/ws", r.handleTerminal)
 	}
 
 	// SPA 路由 fallback：所有未匹配的路由都返回 index.html
