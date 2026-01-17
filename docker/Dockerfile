@@ -83,7 +83,9 @@ RUN apk add --no-cache \
     asterisk-alsa \
     asterisk-curl \
     asterisk-odbc \
-    asterisk-sample-config
+    asterisk-sample-config \
+    minicom \
+    usbutils
 
 # Copy built quectel module (Alpine packaged Asterisk module dir)
 RUN mkdir -p /usr/lib/asterisk/modules
