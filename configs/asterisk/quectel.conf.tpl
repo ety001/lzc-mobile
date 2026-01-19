@@ -5,8 +5,20 @@ u2diag=-1
 disable=no
 
 ; Quectel 设备配置
-; 注意：实际的 quectel 设备配置需要通过 AMI 或手动添加
-; 这里只提供模板结构
+; 预定义常用的 Quectel 设备
+[quectel0]
+device=/dev/ttyUSB0
+audio=/dev/ttyUSB1
+data=/dev/ttyUSB2
+group=0
+disable=no
+
+[quectel1]
+device=/dev/ttyUSB0
+audio=/dev/ttyUSB1
+data=/dev/ttyUSB2
+group=1
+disable=yes
 
 {{range .Dongles}}
 [{{.ID}}]
