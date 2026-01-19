@@ -201,8 +201,8 @@ func Callback(c *gin.Context) {
 		return
 	}
 
-	// 设置会话 cookie（30 天过期）
-	c.SetCookie("session", sessionToken, 30*24*3600, "/", "", false, true)
+	// 设置会话 cookie（1 天过期）
+	c.SetCookie("session", sessionToken, 24*3600, "/", "", false, true)
 
 	// 重定向到前端
 	c.Redirect(http.StatusFound, "/")
@@ -236,21 +236,16 @@ func Middleware() gin.HandlerFunc {
 
 // CheckAuth 检查认证状态（用于 API）
 func CheckAuth(c *gin.Context) {
-	// 首先尝试检查 session cookie
+	// 检查 session cookie
 	session, err := c.Cookie("session")
-	if err == nil && session != "" {
-		c.Next()
+	if err != nil || session == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.Abort()
 		return
 	}
 
-	// 其次尝试检查 HC-Auth-Token (LazyCat 系统使用的 token)
-	token, err := c.Cookie("HC-Auth-Token")
-	if err == nil && token != "" {
-		// TODO: 可以验证 token 的有效性
-		c.Next()
-		return
-	}
+	// TODO: 验证会话有效性（可以存储在 Redis 或数据库中）
+	// 这里简化实现，只检查 cookie 是否存在
 
-	c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-	c.Abort()
+	c.Next()
 }
