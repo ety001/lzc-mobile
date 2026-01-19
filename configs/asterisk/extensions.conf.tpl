@@ -49,19 +49,23 @@ exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_
 exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})}' >> /var/log/asterisk/ussd.txt)
 exten => ussd,n,Hangup()
 
-; 处理来电：路由到绑定的 extension
+; 处理来电：根据 QUECTELNAME 路由到绑定的 extension
+exten => s,1,NoOp(Incoming call from quectel ${QUECTELNAME})
+exten => s,n,GotoIf($["${QUECTELNAME}" = ""]?no-binding)
 {{range .DongleBindings}}
 {{if .Inbound}}
-; Quectel {{.DongleID}} 来电路由到 Extension {{.Extension.Username}}
-exten => s,1,NoOp(Incoming call from quectel {{.DongleID}} to extension {{.Extension.Username}})
+exten => s,n,GotoIf($["${QUECTELNAME}" = "{{.DongleID}}"]?binding-{{.DongleID}})
+{{end}}
+{{end}}
+exten => s,n(no-binding),NoOp(No extension binding found for quectel ${QUECTELNAME})
+exten => s,n,Hangup()
+{{range .DongleBindings}}
+{{if .Inbound}}
+exten => s,n(binding-{{.DongleID}}),NoOp(Routing quectel {{.DongleID}} to extension {{.Extension.Username}})
 exten => s,n,Dial(PJSIP/{{.Extension.Username}},30)
 exten => s,n,Hangup()
 {{end}}
 {{end}}
-
-; 默认来电处理（如果没有绑定）
-exten => s,1,NoOp(Incoming call from quectel but no extension binding)
-exten => s,n,Hangup()
 
 ; Quectel 设备上下文：处理来电、短信、USSD（别名，用于兼容）
 [quectel-incoming]
@@ -78,19 +82,23 @@ exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_
 exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})}' >> /var/log/asterisk/ussd.txt)
 exten => ussd,n,Hangup()
 
-; 处理来电：路由到绑定的 extension
+; 处理来电：根据 QUECTELNAME 路由到绑定的 extension
+exten => s,1,NoOp(Incoming call from quectel ${QUECTELNAME})
+exten => s,n,GotoIf($["${QUECTELNAME}" = ""]?no-binding)
 {{range .DongleBindings}}
 {{if .Inbound}}
-; Quectel {{.DongleID}} 来电路由到 Extension {{.Extension.Username}}
-exten => s,1,NoOp(Incoming call from quectel {{.DongleID}} to extension {{.Extension.Username}})
+exten => s,n,GotoIf($["${QUECTELNAME}" = "{{.DongleID}}"]?binding-{{.DongleID}})
+{{end}}
+{{end}}
+exten => s,n(no-binding),NoOp(No extension binding found for quectel ${QUECTELNAME})
+exten => s,n,Hangup()
+{{range .DongleBindings}}
+{{if .Inbound}}
+exten => s,n(binding-{{.DongleID}}),NoOp(Routing quectel {{.DongleID}} to extension {{.Extension.Username}})
 exten => s,n,Dial(PJSIP/{{.Extension.Username}},30)
 exten => s,n,Hangup()
 {{end}}
 {{end}}
-
-; 默认来电处理（如果没有绑定）
-exten => s,1,NoOp(Incoming call from quectel but no extension binding)
-exten => s,n,Hangup()
 
 ; 去电路由：从 extension 到 quectel
 {{range .DongleBindings}}
