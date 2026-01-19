@@ -257,8 +257,30 @@ function TerminalPage() {
         <div
           ref={terminalRef}
           className="bg-[#1e1e1e]"
-          style={{ height: "600px" }}
+          style={{
+            height: "600px",
+            overflow: "auto"
+          }}
         />
+        <style>{`
+          #terminalRef::-webkit-scrollbar {
+            display: none;
+          }
+          #terminalRef {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+          .xterm-viewport {
+            overflow-y: auto !important;
+          }
+          .xterm-viewport::-webkit-scrollbar {
+            display: none;
+          }
+          .xterm-viewport {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+        `}</style>
       </div>
 
       <div className="mt-4 bg-blue-50 dark:bg-gray-800 border border-blue-200 dark:border-gray-700 rounded-lg p-4">
