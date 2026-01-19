@@ -4,13 +4,16 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
+	"github.com/ety001/lzc-mobile/internal/database"
 )
 
 // OIDCConfig OIDC 配置
@@ -194,7 +197,71 @@ func Callback(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	// 创建会话（简化实现，实际应该存储用户信息）
+	// 解析用户信息
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read UserInfo response: %v", err)
+		c.Redirect(http.StatusFound, "/auth/login?error=userinfo_parse_failed")
+		return
+	}
+
+	var userInfo map[string]interface{}
+	if err := json.Unmarshal(body, &userInfo); err != nil {
+		log.Printf("Failed to parse UserInfo JSON: %v", err)
+		c.Redirect(http.StatusFound, "/auth/login?error=userinfo_parse_failed")
+		return
+	}
+
+	// 提取用户信息
+	// OIDC 标准字段：sub (subject), email, name
+	sub, _ := userInfo["sub"].(string)
+	email, _ := userInfo["email"].(string)
+	name, _ := userInfo["name"].(string)
+
+	if sub == "" {
+		log.Printf("UserInfo missing 'sub' claim")
+		c.Redirect(http.StatusFound, "/auth/login?error=invalid_userinfo")
+		return
+	}
+
+	// 检查是否已存在管理员
+	var adminCount int64
+	database.DB.Model(&database.AdminUser{}).Count(&adminCount)
+
+	// 查找当前用户
+	var existingAdmin database.AdminUser
+	err = database.DB.Where("subject = ?", sub).First(&existingAdmin).Error
+
+	if err == nil {
+		// 用户已存在，是管理员，允许登录
+		log.Printf("Admin user logged in: %s (%s)", existingAdmin.Email, existingAdmin.Name)
+	} else if adminCount == 0 {
+		// 还没有管理员，创建第一个管理员
+		newAdmin := database.AdminUser{
+			Email:   email,
+			Name:    name,
+			Subject: sub,
+		}
+		if err := database.DB.Create(&newAdmin).Error; err != nil {
+			log.Printf("Failed to create admin user: %v", err)
+			c.Redirect(http.StatusFound, "/auth/login?error=db_error")
+			return
+		}
+		log.Printf("First admin user created: %s (%s)", email, name)
+	} else {
+		// 已有管理员，但当前用户不是管理员，拒绝登录
+		log.Printf("Unauthorized login attempt by non-admin user: %s (%s)", email, name)
+
+		// 获取现有管理员信息用于显示错误
+		var firstAdmin database.AdminUser
+		database.DB.First(&firstAdmin)
+		errorMsg := fmt.Sprintf("只允许管理员（%s - %s）操作", firstAdmin.Name, firstAdmin.Email)
+
+		c.Redirect(http.StatusFound, "/auth/login?error=unauthorized&message="+errorMsg)
+		return
+	}
+
+	// 创建会话
 	sessionToken, err := generateState()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})

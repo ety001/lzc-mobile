@@ -114,6 +114,15 @@ type SMSMessage struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
+// AdminUser 管理员用户
+type AdminUser struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Email     string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"email"`     // OIDC 返回的邮箱
+	Name      string    `gorm:"type:varchar(255)" json:"name"`                           // 用户名
+	Subject   string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"subject"`   // OIDC subject (唯一标识)
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // AutoMigrate 自动迁移所有表
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
@@ -124,5 +133,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&DongleBinding{},
 		&SMSMessage{},
 		&GlobalConfig{},
+		&AdminUser{},
 	)
 }
