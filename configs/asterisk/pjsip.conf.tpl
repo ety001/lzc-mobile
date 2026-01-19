@@ -49,10 +49,12 @@ auth_type = userpass
 
 ; Extension configurations
 {{range .Extensions}}
-; AOR for {{.Username}}
+; AOR for {{.Username}} - 支持 TCP 和 UDP
 [{{.Username}}](aor-template)
 type = aor
 qualify_frequency = 60
+remove_existing = no
+; 不在 AOR 中指定 transport，允许客户端自动选择
 
 ; Auth for {{.Username}}
 [{{.Username}}](auth-template)
@@ -60,18 +62,24 @@ type = auth
 username = {{.Username}}
 password = {{.Secret}}
 
-; Endpoint for {{.Username}}
+; Endpoint for {{.Username}} - 使用 UDP
 [{{.Username}}](endpoint-template)
 type = endpoint
 auth = {{.Username}}
 aors = {{.Username}}
 {{if .CallerID}}callerid = {{.CallerID}}{{end}}
 {{if .Context}}context = {{.Context}}{{end}}
-{{if eq .Transport "tcp"}}transport = transport-tcp{{end}}
-{{if eq .Transport "udp"}}transport = transport-udp{{end}}
-{{if eq .Transport "tcp+udp"}}
-; For tcp+udp, use UDP as primary transport (SIP standard)
-; TCP will still work if client explicitly uses TCP transport
 transport = transport-udp
-{{end}}
+
+; Endpoint for {{.Username}}-tcp - 使用 TCP
+[{{.Username}}-tcp](endpoint-template)
+type = endpoint
+auth = {{.Username}}
+aors = {{.Username}}
+{{if .CallerID}}callerid = {{.CallerID}}{{end}}
+{{if .Context}}context = {{.Context}}{{end}}
+transport = transport-tcp
+; TCP 特定配置
+t38_udptl = yes
+accepts_outofcall = yes
 {{end}}
