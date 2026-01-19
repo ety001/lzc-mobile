@@ -26,7 +26,8 @@ dev.ecat.heiyu.space/ety001/lzc-mobile:latest
 docker build --push -t dev.ecat.heiyu.space/ety001/lzc-mobile:latest -f docker/Dockerfile .
 ```
 
-> `docker push` 到 `dev.ecat.heiyu.space` 后，需要检查远程的镜像 id 确认是否真正更新了。
+> 编译时，需要随机一个 tag 来替代 latest
+> 同时需要把这个 tag 更新到 ~/workspace/lzc-appdb/lzc-mobile/lzc-manifest.yml 文件中的 `services->lzcmobile->image`
 
 ## 远程部署命令
 

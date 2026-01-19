@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
+import { Button } from "@/components/ui/button";
 import "xterm/css/xterm.css";
 
 function TerminalPage() {
@@ -10,9 +11,10 @@ function TerminalPage() {
   const wsRef = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [resizeObserver, setResizeObserver] = useState(null);
+  const [shellPath, setShellPath] = useState("/bin/ash");
 
+  // 初始化终端（只执行一次）
   useEffect(() => {
-    // 初始化终端
     const terminal = new Terminal({
       cursorBlink: true,
       fontSize: 14,
@@ -51,58 +53,21 @@ function TerminalPage() {
     terminalInstance.current = terminal;
     fitAddonInstance.current = fitAddon;
 
-    // 建立 WebSocket 连接
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/v1/terminal/ws`;
+    // 显示欢迎信息
+    terminal.writeln("\x1b[36m调试工具终端\x1b[0m");
+    terminal.writeln('点击上方"连接"按钮连接到容器\r\n');
 
-    setConnectionStatus("connecting");
+    // 设置 ResizeObserver 以自动调整终端大小
+    const observer = new ResizeObserver(() => {
+      try {
+        fitAddon.fit();
+      } catch (e) {
+        // 忽略 resize 错误
+      }
+    });
 
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnectionStatus("connected");
-        terminal.writeln("\x1b[32m✓ 已连接到容器终端\x1b[0m\r\n");
-      };
-
-      ws.onmessage = (event) => {
-        terminal.write(event.data);
-      };
-
-      terminal.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(data);
-        }
-      });
-
-      ws.onclose = () => {
-        setConnectionStatus("disconnected");
-        terminal.writeln("\r\n\x1b[31m✗ 连接已断开\x1b[0m");
-      };
-
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        terminal.writeln("\r\n\x1b[31m✗ 连接错误\x1b[0m");
-      };
-
-      // 设置 ResizeObserver 以自动调整终端大小
-      const observer = new ResizeObserver(() => {
-        try {
-          fitAddon.fit();
-        } catch (e) {
-          // 忽略 resize 错误
-        }
-      });
-
-      observer.observe(terminalRef.current);
-      setResizeObserver(observer);
-    } catch (error) {
-      console.error("Failed to connect to terminal:", error);
-      setConnectionStatus("error");
-      terminal.writeln(`\x1b[31m✗ 无法连接到终端: ${error.message}\x1b[0m\r\n`);
-    }
+    observer.observe(terminalRef.current);
+    setResizeObserver(observer);
 
     // 清理函数
     return () => {
@@ -112,11 +77,102 @@ function TerminalPage() {
       if (terminalInstance.current) {
         terminalInstance.current.dispose();
       }
-      if (resizeObserver) {
-        resizeObserver.disconnect();
+      if (observer) {
+        observer.disconnect();
       }
     };
   }, []);
+
+  // 连接到终端
+  const connect = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    const terminal = terminalInstance.current;
+    if (!terminal) return;
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/api/v1/terminal/ws?shell=${encodeURIComponent(shellPath)}`;
+
+    setConnectionStatus("connecting");
+    terminal.clear();
+    terminal.writeln("\x1b[33m正在连接到容器终端...\x1b[0m\r\n");
+    terminal.writeln(`Shell: ${shellPath}\r\n`);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setConnectionStatus("connected");
+        terminal.writeln("\x1b[32m✓ 已连接到容器终端\x1b[0m\r\n");
+
+        // 发送初始终端大小
+        const cols = terminal.cols;
+        const rows = terminal.rows;
+        ws.send(JSON.stringify({
+          type: 'resize',
+          cols: cols,
+          rows: rows
+        }));
+        console.log('[Terminal] Initial size:', cols, 'x', rows);
+      };
+
+      ws.onmessage = (event) => {
+        console.log('[Terminal] Received data:', JSON.stringify(event.data), 'length:', event.data.length);
+        terminal.write(event.data);
+      };
+
+      // 监听终端大小变化
+      terminal.onResize(({ cols, rows }) => {
+        console.log('[Terminal] Resized to:', cols, 'x', rows);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'resize',
+            cols: cols,
+            rows: rows
+          }));
+        }
+      });
+
+      terminal.onData((data) => {
+        console.log('[Terminal] Sending key:', JSON.stringify(data), 'charCode:', data.charCodeAt(0));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(data);
+        }
+      });
+
+      ws.onclose = () => {
+        setConnectionStatus("disconnected");
+        terminal.writeln("\r\n\x1b[31m✗ 连接已断开\x1b[0m\r\n");
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        setConnectionStatus("error");
+        terminal.writeln("\r\n\x1b[31m✗ 连接错误\x1b[0m\r\n");
+      };
+    } catch (error) {
+      console.error("Failed to connect to terminal:", error);
+      setConnectionStatus("error");
+      terminal.writeln(`\x1b[31m✗ 无法连接到终端: ${error.message}\x1b[0m\r\n`);
+    }
+  };
+
+  // 断开连接
+  const disconnect = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setConnectionStatus("disconnected");
+    const terminal = terminalInstance.current;
+    if (terminal) {
+      terminal.writeln("\r\n\x1b[31m✗ 已断开连接\x1b[0m\r\n");
+    }
+  };
 
   const getStatusColor = () => {
     switch (connectionStatus) {
@@ -157,12 +213,44 @@ function TerminalPage() {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
         <div className="bg-gray-800 px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
-            <span className="text-white text-sm">{getStatusText()}</span>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
+              <span className="text-white text-sm">{getStatusText()}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={shellPath}
+                onChange={(e) => setShellPath(e.target.value)}
+                className="bg-gray-700 text-white text-xs px-2 py-1 rounded w-32"
+                placeholder="/bin/ash"
+                disabled={connectionStatus === "connected" || connectionStatus === "connecting"}
+              />
+            </div>
           </div>
-          <div className="text-gray-400 text-xs">
-            Shell: /bin/ash | 工作目录: /app
+          <div className="flex items-center space-x-4">
+            <div className="text-gray-400 text-xs">
+              工作目录: /app
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                onClick={connect}
+                disabled={connectionStatus === "connected" || connectionStatus === "connecting"}
+                variant="secondary"
+              >
+                连接
+              </Button>
+              <Button
+                size="sm"
+                onClick={disconnect}
+                disabled={connectionStatus === "disconnected"}
+                variant="secondary"
+              >
+                断开
+              </Button>
+            </div>
           </div>
         </div>
 

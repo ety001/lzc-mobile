@@ -236,12 +236,21 @@ func Middleware() gin.HandlerFunc {
 
 // CheckAuth 检查认证状态（用于 API）
 func CheckAuth(c *gin.Context) {
+	// 首先尝试检查 session cookie
 	session, err := c.Cookie("session")
-	if err != nil || session == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		c.Abort()
+	if err == nil && session != "" {
+		c.Next()
 		return
 	}
 
-	c.Next()
+	// 其次尝试检查 HC-Auth-Token (LazyCat 系统使用的 token)
+	token, err := c.Cookie("HC-Auth-Token")
+	if err == nil && token != "" {
+		// TODO: 可以验证 token 的有效性
+		c.Next()
+		return
+	}
+
+	c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	c.Abort()
 }
