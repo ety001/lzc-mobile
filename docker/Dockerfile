@@ -107,7 +107,13 @@ RUN mkdir -p \
     /var/log/asterisk \
     /var/run/asterisk \
     /var/spool/asterisk \
-    /var/log/supervisor
+    /var/log/supervisor \
+    /var/run/lock
+
+# Fix lock directory permissions for chan_quectel
+# /var/lock is a symlink to /var/run/lock, chan_quectel needs write access
+RUN chown root:dialout /var/run/lock && \
+    chmod 775 /var/run/lock
 
 EXPOSE 8071
 
