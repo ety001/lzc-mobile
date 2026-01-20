@@ -51,7 +51,9 @@ fix_device_permissions() {
     for device in /dev/ttyUSB*; do
         if [ -e "$device" ]; then
             chgrp dialout "$device" 2>/dev/null || true
-            chmod 660 "$device" 2>/dev/null || true
+            # 使用 666 权限让所有用户都可以访问
+            # 这是因为 Asterisk 切换用户时不会保留附加组
+            chmod 666 "$device" 2>/dev/null || true
         fi
     done
 
