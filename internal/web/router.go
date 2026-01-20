@@ -76,13 +76,6 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 			system.POST("/restart", r.restartAsterisk)
 		}
 
-		// 日志接口
-		logs := api.Group("/logs")
-		{
-			logs.GET("", r.getLogs)
-			logs.GET("/stream", r.streamLogs)
-		}
-
 		// 全局配置
 		settings := api.Group("/settings")
 		{
