@@ -263,8 +263,8 @@ func (c *Client) SendSMS(device, number, message string) error {
 	action.SetField("Priority", "1")
 	action.SetField("Async", "true")
 	// 设置变量传递给 dialplan
-	action.SetField("Variable", fmt.Sprintf("QUECTEL_DEVICE=%s", device))
-	action.SetField("Variable", fmt.Sprintf("SMS_MESSAGE=%s", message))
+	// 多个变量用 \n 连接
+	action.SetField("Variable", fmt.Sprintf("QUECTEL_DEVICE=%s\nSMS_MESSAGE=%s", device, message))
 	action.AddActionID()
 
 	return c.SendAction(action)
