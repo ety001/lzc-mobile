@@ -417,6 +417,93 @@ LAZYCAT_AUTH_OIDC_REDIRECT_URI=/auth/oidc/callback
    - 种子数据在 `internal/database/db.go` 的 `Seed()` 函数中
    - 生产环境数据库路径：`/var/lib/lzc-mobile/data.db`
 
+## 短信发送状态确认
+
+### 查看短信发送状态的方法
+
+#### 1. 通过 Web 界面查看数据库记录
+- 访问短信管理页面
+- 查看已发送的短信列表
+- `direction=outbound` 表示发送的短信
+- 状态字段可显示发送结果（需要实现）
+
+#### 2. 查看 Asterisk CLI 实时日志
+```bash
+# 进入容器
+ssh root@ecat.heiyu.space
+lzc-docker exec -it inkakawaety001lzcmobile-lzcmobile-1 /usr/sbin/asterisk -rvvvvv
+```
+发送短信时，你应该看到类似这样的日志：
+```
+-- Originating Local/sms@quectel-sms
+-- Executing [17190013744@quectel-sms:1] NoOp("Sending SMS via quectel: device=quectel0, number=17190013744, message=test")
+-- Executing [17190013744@quectel-sms:2] QuectelSendSMS("quectel0","17190013744","test",1440,yes,"")
+-- Called quectel0
+[quectel0] Sending SMS to 17190013744
+[quectel0] SMS sent successfully
+```
+
+#### 3. 查看容器日志（筛选发送相关）
+```bash
+ssh root@ecat.heiyu.space "lzc-docker logs inkakawaety001lzcmobile-lzcmobile-1 2>&1 | grep -E '(QuectelSendSMS|quectel.*sms|originat)' | tail -20"
+```
+
+#### 4. 检查设备状态
+```bash
+ssh root@ecat.heiyu.space "lzc-docker exec inkakawaety001lzcmobile-lzcmobile-1 /usr/sbin/asterisk -rx 'quectel show device state'"
+```
+
+#### 5. 查看数据库中的短信记录
+```bash
+ssh root@ecat.heiyu.space "lzc-docker exec inkakawaety001lzcmobile-lzcmobile-1 sqlite3 /var/lib/lzc-mobile/data.db 'SELECT dongle_id, phone_number, substr(content,1,20) || \"...\", direction, created_at FROM sms_messages ORDER BY created_at DESC LIMIT 10'"
+```
+
+#### 6. 检查错误日志
+```bash
+ssh root@ecat.heiyu.space "lzc-docker logs inkakawaety001lzcmobile-lzcmobile-1 2>&1 | grep -i 'error\|failed\|requestnotallowed' | tail -20"
+```
+
+### 短信发送失败的常见原因
+
+1. **AMI 权限不足**
+   - 错误：`SecurityEvent="RequestNotAllowed"`
+   - 解决：在 `manager.conf.tpl` 中添加 `originate` 权限
+
+2. **Dialplan 缺失**
+   - 错误：`sent to invalid extension: context,exten,priority=default,sms,1`
+   - 解决：确保 `extensions.conf.tpl` 中有 `[quectel-sms]` context
+
+3. **设备未就绪**
+   - 错误：`[quectel0] Unable to open /dev/ttyUSB2`
+   - 解决：检查设备权限和连接状态
+
+4. **变量未传递**
+   - 错误：`device=, number=, message=`
+   - 解决：检查 AMI 变量设置格式（使用 `\n` 分隔多个变量）
+
+### 手机号码隐私保护
+
+在显示和日志中，应该对手机号码进行脱敏处理：
+
+**显示格式：**
+- 完整号码：`17190013744`
+- 脱敏显示：`171*******44` 或 `1719001****`
+
+**实现位置：**
+- 前端显示组件
+- 日志输出
+- 数据库查询结果
+- API 响应
+
+**示例代码：**
+```javascript
+// 脱敏函数
+function maskPhoneNumber(phone) {
+  if (!phone || phone.length < 7) return phone;
+  return phone.substring(0, 7) + "****";
+}
+```
+
 5. **日志管理**
    - Asterisk 日志：`/var/log/asterisk/full`
    - 使用 logger.conf 配置日志轮转

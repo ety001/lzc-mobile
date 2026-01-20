@@ -256,6 +256,11 @@ func (c *Client) Restart() error {
 func (c *Client) SendSMS(device, number, message string) error {
 	// Quectel 发送短信：使用 Originate 动作调用 dialplan
 	// dialplan 中会调用 QuectelSendSMS(device,number,message,validity,report,magicID)
+
+	// 脱敏手机号码用于日志
+	maskedNumber := maskPhoneNumber(number)
+	log.Printf("[SMS] Sending SMS via %s: to=%s, content=%q", device, maskedNumber, message)
+
 	action := goami2.NewAction("Originate")
 	action.SetField("Channel", fmt.Sprintf("Local/%s@quectel-sms", number))
 	action.SetField("Context", "quectel-sms")
@@ -268,6 +273,14 @@ func (c *Client) SendSMS(device, number, message string) error {
 	action.AddActionID()
 
 	return c.SendAction(action)
+}
+
+// maskPhoneNumber 脱敏手机号码
+func maskPhoneNumber(phone string) string {
+	if len(phone) < 7 {
+		return phone
+	}
+	return phone[:7] + "****"
 }
 
 // GetStatus 获取当前状态
