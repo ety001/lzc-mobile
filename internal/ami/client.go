@@ -256,31 +256,24 @@ func (c *Client) Restart() error {
 func (c *Client) SendSMS(device, number, message string) error {
 	// Quectel 发送短信：使用 Originate 动作调用 dialplan
 	// dialplan 中会调用 QuectelSendSMS(device,number,message,validity,report,magicID)
-
-	// 脱敏手机号码用于日志
-	maskedNumber := maskPhoneNumber(number)
-	log.Printf("[SMS] Sending SMS via %s: to=%s, content=%q", device, maskedNumber, message)
-
 	action := goami2.NewAction("Originate")
-	action.SetField("Channel", fmt.Sprintf("Local/%s@quectel-sms", number))
+	// 使用标准的 Local channel 格式
+	channel := fmt.Sprintf("Local/%s@quectel-sms", number)
+	action.SetField("Channel", channel)
 	action.SetField("Context", "quectel-sms")
 	action.SetField("Exten", number)
 	action.SetField("Priority", "1")
 	action.SetField("Async", "true")
-	// 设置变量传递给 dialplan
-	// 多个变量用 \n 连接
-	action.SetField("Variable", fmt.Sprintf("QUECTEL_DEVICE=%s\nSMS_MESSAGE=%s", device, message))
+	// 使用 AddField 添加多个 Variable 字段，__ 前缀会导出到目标 channel
+	// AddField 会添加新字段而不是覆盖同名字段
+	action.AddField("Variable", fmt.Sprintf("__QUECTEL_DEVICE=%s", device))
+	action.AddField("Variable", fmt.Sprintf("__SMS_MESSAGE=%s", message))
 	action.AddActionID()
 
-	return c.SendAction(action)
-}
+	log.Printf("[SMS] Sending SMS via AMI: device=%s, number=%s, message=%q", device, number, message)
+	log.Printf("[SMS] AMI Channel: %s", channel)
 
-// maskPhoneNumber 脱敏手机号码
-func maskPhoneNumber(phone string) string {
-	if len(phone) < 7 {
-		return phone
-	}
-	return phone[:7] + "****"
+	return c.SendAction(action)
 }
 
 // GetStatus 获取当前状态

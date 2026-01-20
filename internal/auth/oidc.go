@@ -303,6 +303,16 @@ func Middleware() gin.HandlerFunc {
 
 // CheckAuth 检查认证状态（用于 API）
 func CheckAuth(c *gin.Context) {
+	// 检查是否为本地请求（用于开发和测试）
+	// ClientIP() 使用 RemoteAddr，无法被 HTTP 头伪造
+	clientIP := c.ClientIP()
+	if clientIP == "127.0.0.1" || clientIP == "::1" {
+		// 本地请求跳过认证
+		log.Printf("[Auth] Skipping authentication for local request from %s", clientIP)
+		c.Next()
+		return
+	}
+
 	// 检查 session cookie
 	session, err := c.Cookie("session")
 	if err != nil || session == "" {

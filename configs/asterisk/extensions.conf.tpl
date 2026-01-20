@@ -113,5 +113,6 @@ exten => {{.Extension.Username}},n,Hangup()
 ; Quectel 短信发送上下文（用于通过 AMI Originate 发送短信）
 [quectel-sms]
 exten => _X.,1,NoOp(Sending SMS via quectel: device=${QUECTEL_DEVICE}, number=${EXTEN}, message=${SMS_MESSAGE})
+exten => _X.,n,NoOp(All variables: QUECTEL_DEVICE=${QUECTEL_DEVICE}, SMS_MESSAGE=${SMS_MESSAGE}, __QUECTEL_DEVICE=${__QUECTEL_DEVICE}, __SMS_MESSAGE=${__SMS_MESSAGE})
 exten => _X.,n,QuectelSendSMS(${QUECTEL_DEVICE},${EXTEN},${SMS_MESSAGE},1440,yes,"")
 exten => _X.,n,Hangup()

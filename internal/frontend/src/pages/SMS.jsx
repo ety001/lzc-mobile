@@ -16,13 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 
-// 手机号码脱敏函数
-const maskPhoneNumber = (phone) => {
-  if (!phone || phone.length < 7) return phone;
-  // 保留前7位，后面用****替代
-  return phone.substring(0, 7) + "****";
-};
-
 export default function SMS() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -279,9 +272,7 @@ export default function SMS() {
                       <TableCell>
                         <Badge variant="outline" className="font-mono">{message.dongle_id}</Badge>
                       </TableCell>
-                      <TableCell className="font-mono" title={message.phone_number}>
-                        {maskPhoneNumber(message.phone_number)}
-                      </TableCell>
+                      <TableCell className="font-mono">{message.phone_number}</TableCell>
                       <TableCell>
                         <Badge variant={message.direction === "inbound" ? "default" : "secondary"}>
                           {message.direction === "inbound" ? "接收" : "发送"}
