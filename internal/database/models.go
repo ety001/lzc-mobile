@@ -103,16 +103,17 @@ type DongleBinding struct {
 
 // SMSMessage SMS 消息
 type SMSMessage struct {
-	ID          uint       `gorm:"primaryKey" json:"id"`
-	DongleID    string     `gorm:"type:varchar(100);not null;index" json:"dongle_id"`       // Dongle 设备 ID（如 quectel0）
-	PhoneNumber string     `gorm:"type:varchar(50);not null;index" json:"phone_number"`     // 电话号码
-	Content     string     `gorm:"type:text;not null" json:"content"`                       // 短信内容
-	Direction   string     `gorm:"type:varchar(10);default:inbound;index" json:"direction"` // 方向：inbound（接收）或 outbound（发送）
-	SMSIndex    int        `gorm:"index" json:"sms_index"`                                 // SIM 卡短信索引
-	Pushed      bool       `gorm:"default:false;index" json:"pushed"`                       // 是否已推送
-	PushedAt    *time.Time `json:"pushed_at"`                                               // 推送时间
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	DongleID     string     `gorm:"type:varchar(100);not null;index" json:"dongle_id"`       // Dongle 设备 ID（如 quectel0）
+	PhoneNumber  string     `gorm:"type:varchar(50);not null;index" json:"phone_number"`     // 电话号码
+	Content      string     `gorm:"type:text;not null" json:"content"`                       // 短信内容
+	Direction    string     `gorm:"type:varchar(10);default:inbound;index" json:"direction"` // 方向：inbound（接收）或 outbound（发送）
+	SMSIndex     int        `gorm:"index" json:"sms_index"`                                 // SIM 卡短信索引
+	SMSTimestamp *time.Time `json:"sms_timestamp"`                                        // SIM 卡短信时间戳
+	Pushed       bool       `gorm:"default:false;index" json:"pushed"`                       // 是否已推送
+	PushedAt     *time.Time `json:"pushed_at"`                                             // 推送时间
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // AdminUser 管理员用户

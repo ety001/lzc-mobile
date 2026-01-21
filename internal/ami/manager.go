@@ -20,7 +20,7 @@ type Manager struct {
 // StatusSubscriber 状态订阅者接口
 type StatusSubscriber interface {
 	OnStatusUpdate(info *StatusInfo)
-	OnSMSReceived(device, number, message string)
+	OnSMSReceived(device, number, message, timestamp string)
 }
 
 var (
@@ -123,6 +123,7 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 			device := msg.Field("Device")
 			number := msg.Field("Sender")
 			message := msg.Field("Message")
+			timestamp := msg.Field("Timestamp")
 			// 如果有 MessageBase64 字段,优先使用(避免特殊字符破坏 AMI 协议)
 			if messageBase64 := msg.Field("MessageBase64"); messageBase64 != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(messageBase64); err == nil {
@@ -130,7 +131,7 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 				}
 			}
 			if device != "" && number != "" && message != "" {
-				m.notifySMS(device, number, message)
+				m.notifySMS(device, number, message, timestamp)
 			}
 		} else if eventType == "DongleSMSReceived" || eventType == "QuectelSMSReceived" {
 			device := msg.Field("Device")
@@ -154,8 +155,9 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 					message = smsBase64
 				}
 			}
+			timestamp := msg.Field("Timestamp")
 			if device != "" && number != "" && message != "" {
-				m.notifySMS(device, number, message)
+				m.notifySMS(device, number, message, timestamp)
 			}
 		}
 	case "FullyBooted":
@@ -165,7 +167,7 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 }
 
 // notifySMS 通知订阅者收到短信
-func (m *Manager) notifySMS(device, number, message string) {
+func (m *Manager) notifySMS(device, number, message, timestamp string) {
 	// 清理消息中的特殊字符,避免日志解析错误
 	// 将 \r 和 \n 替换为空格
 	message = strings.ReplaceAll(message, "\r", " ")
@@ -177,7 +179,7 @@ func (m *Manager) notifySMS(device, number, message string) {
 	m.mu.RUnlock()
 
 	for _, sub := range subscribers {
-		sub.OnSMSReceived(device, number, message)
+		sub.OnSMSReceived(device, number, message, timestamp)
 	}
 }
 

@@ -42,7 +42,7 @@ exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${B
 exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - ${CALLERID(num)}: ${BASE64_DECODE(${SMS_BASE64})}' >> /var/log/asterisk/sms.txt)
 ; 通过 AMI UserEvent 通知 Go 程序处理短信
 ; 使用 BASE64 编码避免特殊字符破坏 AMI 协议
-exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},MessageBase64: ${SMS_BASE64})
+exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},MessageBase64: ${SMS_BASE64},Timestamp: ${SMS_TIMESTAMP})
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD
@@ -76,7 +76,7 @@ exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${B
 exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - ${CALLERID(num)}: ${BASE64_DECODE(${SMS_BASE64})}' >> /var/log/asterisk/sms.txt)
 ; 通过 AMI UserEvent 通知 Go 程序处理短信
 ; 使用 BASE64 编码避免特殊字符破坏 AMI 协议
-exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},MessageBase64: ${SMS_BASE64})
+exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},MessageBase64: ${SMS_BASE64},Timestamp: ${SMS_TIMESTAMP})
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD

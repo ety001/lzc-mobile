@@ -29,21 +29,36 @@ func NewHandler() *Handler {
 
 // OnSMSReceived 处理收到的短信
 // 推送消息到所有启用的通知渠道，并保存到数据库
-func (h *Handler) OnSMSReceived(device, number, message string) {
-	log.Printf("SMS received from %s on device %s: %s", number, device, message)
+func (h *Handler) OnSMSReceived(device, number, message, timestamp string) {
+	log.Printf("SMS received from %s on device %s: %s (timestamp: %s)", number, device, message, timestamp)
 
-	// 检查是否已存在相同的短信（最近 5 分钟内，相同号码和内容）
+	// 检查是否已存在相同的短信（使用 SIM 卡时间戳、号码和内容）
 	var existingMessage database.SMSMessage
-	fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
 	err := database.DB.Where(
-		"dongle_id = ? AND phone_number = ? AND content = ? AND created_at > ?",
-		device, number, message, fiveMinutesAgo,
-	).First(&existingMessage).Error
+		"dongle_id = ? AND phone_number = ? AND content = ?",
+		device, number, message,
+	).Order("created_at DESC").First(&existingMessage).Error
 
 	if err == nil {
-		// 找到相同的短信，跳过处理
-		log.Printf("Duplicate SMS detected (ID %d), skipping notification", existingMessage.ID)
-		return
+		// 找到相同的短信，检查时间戳是否相同
+		if existingMessage.SMSTimestamp != nil && timestamp != "" {
+			// 将数据库中的时间戳转换为字符串进行比较
+			dbTimestamp := existingMessage.SMSTimestamp.Format("06/01/02 15:04:05")
+			if dbTimestamp == timestamp {
+				// 时间戳也相同，确认为重复短信
+				log.Printf("Duplicate SMS detected (ID %d), skipping notification", existingMessage.ID)
+				return
+			}
+			// 时间戳不同，可能是不同时间收到的相同内容短信，继续处理
+		} else {
+			// 没有时间戳信息，使用内容判断
+			// 检查是否在最近 1 小时内创建
+			oneHourAgo := time.Now().Add(-1 * time.Hour)
+			if existingMessage.CreatedAt.After(oneHourAgo) {
+				log.Printf("Duplicate SMS detected (ID %d) within 1 hour, skipping notification", existingMessage.ID)
+				return
+			}
+		}
 	}
 
 	// 格式化通知消息
@@ -74,15 +89,32 @@ func (h *Handler) OnSMSReceived(device, number, message string) {
 		}
 	}
 
-	// 保存到数据库，标记为已推送，方向为 inbound（接收）
+	// 解析 SIM 卡时间戳
+	var smsTime time.Time
+	if timestamp != "" {
+		// SIM 卡时间戳格式: "YY/MM/DD HH:MM:SS"
+		// 例如: "25/01/21 14:30:00"
+		smsTime, err = time.Parse("06/01/02 15:04:05", timestamp)
+		if err != nil {
+			log.Printf("Error parsing SMS timestamp '%s': %v, using current time", timestamp, err)
+			smsTime = time.Now()
+		}
+		// 转换为 2000 年代
+		smsTime = smsTime.AddDate(2000, 0, 0)
+	} else {
+		smsTime = time.Now()
+	}
+
+	// 保存到数据库，使用 SIM 卡时间戳，标记为已推送，方向为 inbound（接收）
 	now := time.Now()
 	smsMessage := database.SMSMessage{
-		DongleID:    device,
-		PhoneNumber: number,
-		Content:     message,
-		Direction:   "inbound",
-		Pushed:      true,
-		PushedAt:    &now,
+		DongleID:     device,
+		PhoneNumber:  number,
+		Content:      message,
+		Direction:    "inbound",
+		SMSTimestamp: &smsTime,
+		Pushed:       true,
+		PushedAt:     &now,
 	}
 
 	if err := database.DB.Create(&smsMessage).Error; err != nil {
@@ -90,7 +122,7 @@ func (h *Handler) OnSMSReceived(device, number, message string) {
 		return
 	}
 
-	log.Printf("SMS message saved to database with ID %d", smsMessage.ID)
+	log.Printf("SMS message saved to database with ID %d (SIM timestamp: %s)", smsMessage.ID, smsTime.Format("2006-01-02 15:04:05"))
 }
 
 // OnStatusUpdate 状态更新（实现 StatusSubscriber 接口）
