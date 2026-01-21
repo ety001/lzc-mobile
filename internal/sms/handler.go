@@ -3,6 +3,7 @@ package sms
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/ety001/lzc-mobile/internal/ami"
@@ -12,7 +13,9 @@ import (
 
 // Handler 短信处理器
 type Handler struct {
-	notifyManager *notify.Manager
+	notifyManager    *notify.Manager
+	startupTime      time.Time
+	mu               sync.RWMutex
 }
 
 // NewHandler 创建短信处理器
@@ -24,6 +27,7 @@ func NewHandler() *Handler {
 
 	return &Handler{
 		notifyManager: nm,
+		startupTime:   time.Now(),
 	}
 }
 
@@ -31,6 +35,10 @@ func NewHandler() *Handler {
 // 推送消息到所有启用的通知渠道，并保存到数据库
 func (h *Handler) OnSMSReceived(device, number, message, timestamp string) {
 	log.Printf("SMS received from %s on device %s: %s (timestamp: %s)", number, device, message, timestamp)
+
+	h.mu.RLock()
+	startupTime := h.startupTime
+	h.mu.RUnlock()
 
 	// 检查是否已存在相同的短信（使用 SIM 卡时间戳、号码和内容）
 	var existingMessage database.SMSMessage
@@ -52,7 +60,12 @@ func (h *Handler) OnSMSReceived(device, number, message, timestamp string) {
 			// 时间戳不同，可能是不同时间收到的相同内容短信，继续处理
 		} else {
 			// 没有时间戳信息，使用内容判断
-			// 检查是否在最近 1 小时内创建
+			// 检查短信是否在应用启动之前创建（SIM 卡中的旧短信）
+			if existingMessage.CreatedAt.Before(startupTime) {
+				log.Printf("Old SMS from SIM card detected (ID %d, created at %v), skipping notification", existingMessage.ID, existingMessage.CreatedAt)
+				return
+			}
+			// 检查是否在最近 1 小时内创建（新启动后收到的重复短信）
 			oneHourAgo := time.Now().Add(-1 * time.Hour)
 			if existingMessage.CreatedAt.After(oneHourAgo) {
 				log.Printf("Duplicate SMS detected (ID %d) within 1 hour, skipping notification", existingMessage.ID)
