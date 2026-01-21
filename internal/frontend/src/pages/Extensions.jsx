@@ -19,7 +19,6 @@ const DEFAULT_FORM = {
   callerid: "",
   host: "dynamic",
   context: "default",
-  port: "",
 };
 
 export default function Extensions() {
@@ -75,7 +74,6 @@ export default function Extensions() {
       callerid: ext.callerid || "",
       host: ext.host || "dynamic",
       context: ext.context || "default",
-      port: ext.port ? String(ext.port) : "",
     });
     setOpen(true);
   };
@@ -220,10 +218,6 @@ export default function Extensions() {
             <div className="grid gap-2">
               <Label htmlFor="context">Context</Label>
               <Input id="context" value={formData.context} onChange={(e) => setFormData({ ...formData, context: e.target.value })} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="port">Port（可选）</Label>
-              <Input id="port" type="number" min={1} max={65535} placeholder="留空则不设置" value={formData.port} onChange={(e) => setFormData({ ...formData, port: e.target.value })} />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>

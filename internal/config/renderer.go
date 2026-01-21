@@ -30,7 +30,6 @@ type ExtensionData struct {
 	CallerID  string
 	Host      string
 	Context   string
-	Port      int
 	Transport string
 }
 
@@ -114,7 +113,6 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 			CallerID:  ext.CallerID,
 			Host:      ext.Host,
 			Context:   ext.Context,
-			Port:      ext.Port,
 			Transport: ext.Transport,
 		}
 	}
@@ -134,7 +132,6 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 				CallerID:  binding.Extension.CallerID,
 				Host:      binding.Extension.Host,
 				Context:   binding.Extension.Context,
-				Port:      binding.Extension.Port,
 				Transport: binding.Extension.Transport,
 			},
 			Inbound:  binding.Inbound,

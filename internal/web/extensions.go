@@ -16,7 +16,6 @@ type ExtensionRequest struct {
 	CallerID  string `json:"callerid"`
 	Host      string `json:"host"`
 	Context   string `json:"context"`
-	Port      *int   `json:"port"`
 	Transport string `json:"transport"`
 }
 
@@ -74,9 +73,6 @@ func (r *Router) createExtension(c *gin.Context) {
 		Context:   req.Context,
 		Transport: req.Transport,
 	}
-	if req.Port != nil {
-		extension.Port = *req.Port
-	}
 
 	if err := database.DB.Create(&extension).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -124,9 +120,6 @@ func (r *Router) updateExtension(c *gin.Context) {
 	}
 	if req.Transport != "" {
 		extension.Transport = req.Transport
-	}
-	if req.Port != nil {
-		extension.Port = *req.Port
 	}
 
 	if err := database.DB.Save(&extension).Error; err != nil {
