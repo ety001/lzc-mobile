@@ -90,7 +90,6 @@ export default function Layout() {
     { path: "/extensions", label: "Extension" },
     { path: "/dongles", label: "Dongle" },
     { path: "/sms", label: "短信" },
-    { path: "/notifications", label: "通知" },
     { path: "/terminal", label: "调试工具" },
     { path: "/settings", label: "设置" },
   ];
