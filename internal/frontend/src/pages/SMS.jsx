@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus } from "lucide-react";
+import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus, Eye, Check, X } from "lucide-react";
 import { smsAPI } from "@/services/sms";
 import { donglesAPI } from "@/services/dongles";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ export default function SMS() {
     message: "",
   });
   const [jumpPage, setJumpPage] = useState("");
+  const [detailMessage, setDetailMessage] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
     fetchBindings();
@@ -139,6 +141,11 @@ export default function SMS() {
 
   const handleResetSMS = () => {
     setSmsFormData({ dongle_id: "", number: "", message: "" });
+  };
+
+  const handleViewDetail = (message) => {
+    setDetailMessage(message);
+    setDetailOpen(true);
   };
 
   const getPageNumbers = () => {
@@ -275,7 +282,6 @@ export default function SMS() {
                   </TableHead>
                   <TableHead className="font-semibold">时间</TableHead>
                   <TableHead className="font-semibold">Dongle</TableHead>
-                  <TableHead className="font-semibold">号码</TableHead>
                   <TableHead className="font-semibold">方向</TableHead>
                   <TableHead className="font-semibold">推送状态</TableHead>
                   <TableHead className="font-semibold">内容</TableHead>
@@ -285,7 +291,7 @@ export default function SMS() {
               <TableBody>
                 {messages.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center">
+                    <TableCell colSpan={7} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <p className="text-sm font-medium text-muted-foreground">暂无短信</p>
                       </div>
@@ -303,7 +309,6 @@ export default function SMS() {
                       <TableCell>
                         <Badge variant="outline" className="font-mono">{message.dongle_id}</Badge>
                       </TableCell>
-                      <TableCell className="font-mono">{message.phone_number}</TableCell>
                       <TableCell>
                         <Badge variant={message.direction === "inbound" ? "default" : "secondary"}>
                           {message.direction === "inbound" ? "接收" : "发送"}
@@ -311,35 +316,50 @@ export default function SMS() {
                       </TableCell>
                       <TableCell>
                         {message.pushed ? (
-                          <Badge variant="default" className="bg-green-500">
-                            已推送 {message.pushed_at && `(${new Date(message.pushed_at).toLocaleTimeString('zh-CN')})`}
-                          </Badge>
+                          <div className="flex items-center justify-center">
+                            <Check className="h-4 w-4 text-green-500" />
+                          </div>
                         ) : (
-                          <Badge variant="outline" className="text-gray-500">
-                            未推送
-                          </Badge>
+                          <div className="flex items-center justify-center">
+                            <X className="h-4 w-4 text-gray-400" />
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="max-w-md truncate">{message.content}</TableCell>
                       <TableCell className="text-right">
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive">
-                              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                              删除
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>删除短信？</AlertDialogTitle>
-                              <AlertDialogDescription>此操作不可恢复。</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>取消</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(message.id)}>确认删除</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => handleViewDetail(message)}
+                            title="查看详情"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                title="删除"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>删除短信？</AlertDialogTitle>
+                                <AlertDialogDescription>此操作不可恢复。</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(message.id)}>确认删除</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -448,6 +468,72 @@ export default function SMS() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">短信详情</DialogTitle>
+          </DialogHeader>
+          {detailMessage && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">时间</Label>
+                  <p className="font-mono text-sm mt-1">
+                    {new Date(detailMessage.created_at).toLocaleString("zh-CN")}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">方向</Label>
+                  <p className="mt-1">
+                    <Badge variant={detailMessage.direction === "inbound" ? "default" : "secondary"}>
+                      {detailMessage.direction === "inbound" ? "接收" : "发送"}
+                    </Badge>
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-muted-foreground">Dongle 设备</Label>
+                <p className="font-mono text-sm mt-1">{detailMessage.dongle_id}</p>
+              </div>
+
+              <div>
+                <Label className="text-muted-foreground">号码</Label>
+                <p className="font-mono text-sm mt-1">{detailMessage.phone_number}</p>
+              </div>
+
+              <div>
+                <Label className="text-muted-foreground">推送状态</Label>
+                <p className="mt-1">
+                  {detailMessage.pushed ? (
+                    <Badge variant="default" className="bg-green-500">
+                      <Check className="h-3 w-3 mr-1" />
+                      已推送
+                      {detailMessage.pushed_at && ` (${new Date(detailMessage.pushed_at).toLocaleString('zh-CN')})`}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-gray-500">
+                      <X className="h-3 w-3 mr-1" />
+                      未推送
+                    </Badge>
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-muted-foreground">短信内容</Label>
+                <p className="text-sm mt-1 whitespace-pre-wrap break-words bg-muted p-3 rounded-md">
+                  {detailMessage.content}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setDetailOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={sendSMSOpen} onOpenChange={setSendSMSOpen}>
         <DialogContent className="max-w-lg">
