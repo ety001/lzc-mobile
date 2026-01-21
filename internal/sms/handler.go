@@ -32,6 +32,20 @@ func NewHandler() *Handler {
 func (h *Handler) OnSMSReceived(device, number, message string) {
 	log.Printf("SMS received from %s on device %s: %s", number, device, message)
 
+	// 检查是否已存在相同的短信（最近 5 分钟内，相同号码和内容）
+	var existingMessage database.SMSMessage
+	fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
+	err := database.DB.Where(
+		"dongle_id = ? AND phone_number = ? AND content = ? AND created_at > ?",
+		device, number, message, fiveMinutesAgo,
+	).First(&existingMessage).Error
+
+	if err == nil {
+		// 找到相同的短信，跳过处理
+		log.Printf("Duplicate SMS detected (ID %d), skipping notification", existingMessage.ID)
+		return
+	}
+
 	// 格式化通知消息
 	notificationMessage := fmt.Sprintf("SMS from %s (device: %s):\n%s", number, device, message)
 
