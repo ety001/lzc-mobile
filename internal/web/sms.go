@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/ety001/lzc-mobile/internal/ami"
+	"github.com/ety001/lzc-mobile/internal/at"
 	"github.com/ety001/lzc-mobile/internal/database"
 	"github.com/gin-gonic/gin"
 )
@@ -78,6 +79,46 @@ func (r *Router) deleteSMSMessage(c *gin.Context) {
 		return
 	}
 
+	// 如果是 inbound 短信,先尝试从 SIM 卡删除
+	if message.Direction == "inbound" {
+		devicePort, err := at.GetDevicePort(message.DongleID)
+		if err == nil {
+			// 成功获取端口,尝试删除 SIM 卡中的短信
+			executor := at.NewCommandExecutor(devicePort)
+			if message.SMSIndex > 0 {
+				// 有索引,直接删除
+				if err := executor.DeleteSMS(message.SMSIndex, 1); err != nil {
+					log.Printf("Warning: Failed to delete SMS from SIM card (index %d): %v", message.SMSIndex, err)
+				} else {
+					log.Printf("[SMS] Successfully deleted SMS from SIM card: index=%d, dongle=%s", message.SMSIndex, message.DongleID)
+				}
+			} else {
+				// 没有索引,尝试通过内容匹配删除
+				messages, err := executor.ListSMS()
+				if err == nil {
+					for _, msg := range messages {
+						if msg["number"] == message.PhoneNumber && msg["content"] == message.Content {
+							if idx, err := strconv.Atoi(msg["index"]); err == nil && idx > 0 {
+								if err := executor.DeleteSMS(idx, 1); err != nil {
+									log.Printf("Warning: Failed to delete SMS from SIM (matched index %d): %v", idx, err)
+								} else {
+									log.Printf("[SMS] Successfully deleted SMS from SIM card (matched): index=%d, dongle=%s", idx, message.DongleID)
+								}
+								break
+							}
+						}
+					}
+				} else {
+					log.Printf("Warning: Failed to list SMS from SIM: %v", err)
+				}
+			}
+		} else {
+			log.Printf("Warning: Failed to get device port for dongle %s: %v", message.DongleID, err)
+		}
+		// 即使 SIM 卡删除失败,也继续删除数据库记录
+	}
+
+	// 从数据库删除
 	if err := database.DB.Delete(&message).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
