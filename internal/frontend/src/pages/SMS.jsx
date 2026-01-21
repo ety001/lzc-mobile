@@ -349,18 +349,99 @@ export default function SMS() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center justify-between mt-4 gap-4 flex-wrap">
               <div className="text-sm text-muted-foreground">
                 第 {page} / {totalPages} 页，共 {total} 条
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                >
+                  首页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   上一页
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+
+                {getPageNumbers().map((pageNum, idx) => (
+                  pageNum === "..." ? (
+                    <span key={idx} className="px-2">
+                      {pageNum}
+                    </span>
+                  ) : (
+                    <Button
+                      key={idx}
+                      variant={page === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPage(pageNum)}
+                      className="w-10"
+                    >
+                      {pageNum}
+                    </Button>
+                  )
+                ))}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                >
                   下一页
                   <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(totalPages)}
+                  disabled={page === totalPages}
+                >
+                  末页
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={jumpPage}
+                  onChange={(e) => setJumpPage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const p = parseInt(jumpPage);
+                      if (p >= 1 && p <= totalPages) {
+                        setPage(p);
+                        setJumpPage("");
+                      }
+                    }
+                  }}
+                  placeholder="页码"
+                  className="w-20"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const p = parseInt(jumpPage);
+                    if (p >= 1 && p <= totalPages) {
+                      setPage(p);
+                      setJumpPage("");
+                    }
+                  }}
+                  disabled={!jumpPage}
+                >
+                  跳转
                 </Button>
               </div>
             </div>
