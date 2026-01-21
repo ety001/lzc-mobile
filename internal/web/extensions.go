@@ -11,12 +11,11 @@ import (
 
 // ExtensionRequest Extension 请求结构
 type ExtensionRequest struct {
-	Username  string `json:"username" binding:"required"`
-	Secret    string `json:"secret" binding:"required"`
-	CallerID  string `json:"callerid"`
-	Host      string `json:"host"`
-	Context   string `json:"context"`
-	Transport string `json:"transport"`
+	Username string `json:"username" binding:"required"`
+	Secret   string `json:"secret" binding:"required"`
+	CallerID string `json:"callerid"`
+	Host     string `json:"host"`
+	Context  string `json:"context"`
 }
 
 // listExtensions 列出所有 Extensions
@@ -61,17 +60,13 @@ func (r *Router) createExtension(c *gin.Context) {
 	if req.Context == "" {
 		req.Context = "default"
 	}
-	if req.Transport == "" {
-		req.Transport = "tcp"
-	}
 
 	extension := database.Extension{
-		Username:  req.Username,
-		Secret:    req.Secret,
-		CallerID:  req.CallerID,
-		Host:      req.Host,
-		Context:   req.Context,
-		Transport: req.Transport,
+		Username: req.Username,
+		Secret:   req.Secret,
+		CallerID: req.CallerID,
+		Host:     req.Host,
+		Context:  req.Context,
 	}
 
 	if err := database.DB.Create(&extension).Error; err != nil {
@@ -117,9 +112,6 @@ func (r *Router) updateExtension(c *gin.Context) {
 	}
 	if req.Context != "" {
 		extension.Context = req.Context
-	}
-	if req.Transport != "" {
-		extension.Transport = req.Transport
 	}
 
 	if err := database.DB.Save(&extension).Error; err != nil {

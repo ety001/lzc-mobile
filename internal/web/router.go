@@ -50,14 +50,23 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 			extensions.DELETE("/:id", r.deleteExtension)
 		}
 
-		// Dongle 管理
-		dongles := api.Group("/dongles")
+		// Dongle 设备管理
+		dongleDevices := api.Group("/dongle-devices")
 		{
-			dongles.GET("", r.listDongleBindings)
-			dongles.POST("", r.createDongleBinding)
-			dongles.PUT("/:id", r.updateDongleBinding)
-			dongles.DELETE("/:id", r.deleteDongleBinding)
-			dongles.POST("/:id/send-sms", r.sendSMS)
+			dongleDevices.GET("", r.listDongles)
+			dongleDevices.POST("", r.createDongle)
+			dongleDevices.GET("/:id", r.getDongle)
+			dongleDevices.PUT("/:id", r.updateDongle)
+			dongleDevices.DELETE("/:id", r.deleteDongle)
+		}
+
+		// Dongle 绑定管理
+		dongleBindings := api.Group("/dongle-bindings")
+		{
+			dongleBindings.GET("", r.listDongleBindings)
+			dongleBindings.POST("", r.createDongleBinding)
+			dongleBindings.DELETE("/:id", r.deleteDongleBinding)
+			dongleBindings.POST("/:id/send-sms", r.sendSMS)
 		}
 
 		// 通知配置

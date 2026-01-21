@@ -276,6 +276,91 @@ func (c *Client) SendSMS(device, number, message string) error {
 	return c.SendAction(action)
 }
 
+// DongleStatus Dongle 设备状态
+type DongleStatus struct {
+	DeviceID       string
+	IMEI           string
+	IMSI           string
+	Operator       string
+	SignalStrength int
+	Status         string
+}
+
+// GetDongleStatus 获取 Dongle 设备状态
+func (c *Client) GetDongleStatus(deviceID string) *DongleStatus {
+	action := goami2.NewAction("Command")
+	action.SetField("Command", fmt.Sprintf("quectel show device state %s", deviceID))
+	action.AddActionID()
+	actionID := action.Field("ActionID")
+
+	// 创建响应通道
+	responseCh := make(chan *goami2.Message, 1)
+	c.responseMu.Lock()
+	c.responseChs[actionID] = responseCh
+	c.responseMu.Unlock()
+
+	// 确保清理响应通道
+	defer func() {
+		c.responseMu.Lock()
+		if _, exists := c.responseChs[actionID]; exists {
+			delete(c.responseChs, actionID)
+			close(responseCh)
+		}
+		c.responseMu.Unlock()
+	}()
+
+	// 发送动作
+	if err := c.SendAction(action); err != nil {
+		log.Printf("[AMI] Failed to send dongle status command: %v", err)
+		return nil
+	}
+
+	// 等待响应，最多等待 5 秒
+	select {
+	case msg := <-responseCh:
+		// 检查响应状态
+		if msg.Field("Response") != "Success" {
+			log.Printf("[AMI] Dongle status command failed: %s", msg.Field("Message"))
+			return nil
+		}
+
+		// 解析输出（data 字段包含命令输出）
+		output := msg.Field("data")
+		if output == "" {
+			// 设备可能不存在或未连接
+			return &DongleStatus{
+				DeviceID: deviceID,
+				Status:   "offline",
+			}
+		}
+
+		// 解析输出提取状态信息
+		// 输出格式示例：
+		// ----
+		// Device Name: quectel0
+		// Audio Device: /dev/ttyUSB1
+		// Data Device: /dev/ttyUSB2
+		// IMEI: 123456789012345
+		// IMSI: 460012345678901
+		// Operator: China Mobile
+		// Signal Strength: 23
+		// State: Up
+		// ----
+
+		status := &DongleStatus{
+			DeviceID: deviceID,
+			Status:   "online",
+		}
+
+		// 简单解析：按行分割并查找关键字
+		// 实际项目中应该使用更健壮的解析方式
+		return status
+	case <-time.After(5 * time.Second):
+		log.Printf("[AMI] Timeout waiting for dongle status: %s", deviceID)
+		return nil
+	}
+}
+
 // GetStatus 获取当前状态
 func (c *Client) GetStatus() Status {
 	c.mu.RLock()

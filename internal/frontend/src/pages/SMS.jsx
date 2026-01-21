@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus, Eye, Check, X } from "lucide-react";
 import { smsAPI } from "@/services/sms";
-import { donglesAPI } from "@/services/dongles";
+import { dongleBindingAPI } from "@/services/dongleBindings";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +49,7 @@ export default function SMS() {
 
   const fetchBindings = async () => {
     try {
-      const response = await donglesAPI.list();
+      const response = await dongleBindingAPI.list();
       setBindings(response.data);
     } catch (error) {
       toast.error("获取 dongle 列表失败");

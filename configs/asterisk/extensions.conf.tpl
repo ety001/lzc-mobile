@@ -10,6 +10,17 @@ priorityjumping=no
 
 [default]
 ; 默认上下文
+
+; 外呼前缀路由：从 extension 通过 dongle 外呼
+{{range .Dongles}}
+{{if not .Disable}}
+; Dongle {{.DeviceID}} 外呼前缀 {{.DialPrefix}}
+exten => _{{.DialPrefix}}X.,1,NoOp(Outgoing call via {{.DeviceID}} to ${EXTEN:{{len .DialPrefix}}})
+exten => _{{.DialPrefix}}X.,n,Dial(Quectel/{{.DeviceID}}/${EXTEN:{{len .DialPrefix}}})
+exten => _{{.DialPrefix}}X.,n,Hangup()
+{{end}}
+{{end}}
+
 ; Extension 之间互相呼叫
 {{range .Extensions}}
 exten => {{.Username}},1,NoOp(Call from ${CALLERID(num)} to extension {{.Username}})

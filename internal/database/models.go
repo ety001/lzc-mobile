@@ -82,9 +82,31 @@ type Extension struct {
 	CallerID  string    `gorm:"type:varchar(255)" json:"callerid"`                      // 主叫号码显示
 	Host      string    `gorm:"type:varchar(255);default:dynamic" json:"host"`          // 主机地址，默认 dynamic
 	Context   string    `gorm:"type:varchar(100);default:default" json:"context"`       // 上下文
-	Transport string    `gorm:"type:varchar(10);default:tcp+udp" json:"transport"`     // 传输协议（已废弃，PJSIP 自动适配）
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Dongle USB Dongle 设备配置
+type Dongle struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	DeviceID    string    `gorm:"type:varchar(100);not null;uniqueIndex" json:"device_id"` // quectel0, quectel1
+	Device      string    `gorm:"type:varchar(255)" json:"device"`      // /dev/ttyUSB0
+	Audio       string    `gorm:"type:varchar(255)" json:"audio"`       // /dev/ttyUSB1
+	Data        string    `gorm:"type:varchar(255)" json:"data"`        // /dev/ttyUSB2
+	Group       int       `gorm:"default:0" json:"group"`              // 组号（默认 0）
+	Context     string    `gorm:"type:varchar(100);default:quectel-incoming" json:"context"` // 来电上下文
+	DialPrefix  string    `gorm:"type:varchar(10);default:999" json:"dial_prefix"` // 外呼前缀
+	Disable     bool      `gorm:"default:false" json:"disable"`        // 是否禁用
+
+	// 运行时状态（从 AMI 获取，不持久化）
+	IMEI           string `gorm:"-" json:"imei,omitempty"`
+	IMSI           string `gorm:"-" json:"imsi,omitempty"`
+	Operator       string `gorm:"-" json:"operator,omitempty"`
+	SignalStrength int    `gorm:"-" json:"signal_strength,omitempty"`
+	Status         string `gorm:"-" json:"status,omitempty"` // unknown, online, offline
+
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // DongleBinding Dongle 来去电绑定关系
@@ -92,6 +114,7 @@ type Extension struct {
 type DongleBinding struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	DongleID    string    `gorm:"type:varchar(100);not null;index" json:"dongle_id"` // Dongle 设备 ID（如 quectel0）
+	Dongle      Dongle    `gorm:"foreignKey:DongleID;references:DeviceID" json:"dongle"`
 	ExtensionID uint      `gorm:"not null;index" json:"extension_id"`                // 关联的 Extension ID
 	Extension   Extension `gorm:"foreignKey:ExtensionID" json:"extension"`           // 外键关联
 	Inbound     bool      `gorm:"default:true" json:"inbound"`                       // 是否处理来电
@@ -131,6 +154,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&RTPConfig{},
 		&NotificationConfig{},
 		&Extension{},
+		&Dongle{},
 		&DongleBinding{},
 		&SMSMessage{},
 		&GlobalConfig{},

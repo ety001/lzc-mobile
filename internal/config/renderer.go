@@ -25,12 +25,11 @@ type ConfigData struct {
 
 // ExtensionData Extension 模板数据
 type ExtensionData struct {
-	Username  string
-	Secret    string
-	CallerID  string
-	Host      string
-	Context   string
-	Transport string
+	Username string
+	Secret   string
+	CallerID string
+	Host     string
+	Context  string
 }
 
 // DongleBindingData Dongle 绑定模板数据
@@ -43,14 +42,14 @@ type DongleBindingData struct {
 
 // DongleData Dongle 设备模板数据
 type DongleData struct {
-	ID      string
-	IMEI    string
-	IMSI    string
-	Device  string
-	Group   int
-	Audio   string
-	Data    string
-	Disable bool
+	DeviceID   string // quectel0, quectel1
+	Device     string // /dev/ttyUSB0
+	Audio      string // /dev/ttyUSB1
+	Data       string // /dev/ttyUSB2
+	Group      int    // 组号（默认 0）
+	Context    string // 来电上下文
+	DialPrefix string // 外呼前缀
+	Disable    bool   // 是否禁用
 }
 
 // Renderer 配置渲染器
@@ -108,12 +107,11 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 	data.Extensions = make([]ExtensionData, len(extensions))
 	for i, ext := range extensions {
 		data.Extensions[i] = ExtensionData{
-			Username:  ext.Username,
-			Secret:    ext.Secret,
-			CallerID:  ext.CallerID,
-			Host:      ext.Host,
-			Context:   ext.Context,
-			Transport: ext.Transport,
+			Username: ext.Username,
+			Secret:   ext.Secret,
+			CallerID: ext.CallerID,
+			Host:     ext.Host,
+			Context:  ext.Context,
 		}
 	}
 
@@ -127,20 +125,35 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 		data.DongleBindings[i] = DongleBindingData{
 			DongleID: binding.DongleID,
 			Extension: ExtensionData{
-				Username:  binding.Extension.Username,
-				Secret:    binding.Extension.Secret,
-				CallerID:  binding.Extension.CallerID,
-				Host:      binding.Extension.Host,
-				Context:   binding.Extension.Context,
-				Transport: binding.Extension.Transport,
+				Username: binding.Extension.Username,
+				Secret:   binding.Extension.Secret,
+				CallerID: binding.Extension.CallerID,
+				Host:     binding.Extension.Host,
+				Context:  binding.Extension.Context,
 			},
 			Inbound:  binding.Inbound,
 			Outbound: binding.Outbound,
 		}
 	}
 
-	// Dongle 设备配置（目前为空，后续可通过 AMI 获取）
-	data.Dongles = []DongleData{}
+	// 加载 Dongle 设备
+	var dongles []database.Dongle
+	if err := database.DB.Find(&dongles).Error; err != nil {
+		return nil, fmt.Errorf("failed to load dongles: %w", err)
+	}
+	data.Dongles = make([]DongleData, len(dongles))
+	for i, dongle := range dongles {
+		data.Dongles[i] = DongleData{
+			DeviceID:   dongle.DeviceID,
+			Device:     dongle.Device,
+			Audio:      dongle.Audio,
+			Data:       dongle.Data,
+			Group:      dongle.Group,
+			Context:    dongle.Context,
+			DialPrefix: dongle.DialPrefix,
+			Disable:    dongle.Disable,
+		}
+	}
 
 	return data, nil
 }
