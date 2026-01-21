@@ -35,6 +35,7 @@ export default function SMS() {
     number: "",
     message: "",
   });
+  const [jumpPage, setJumpPage] = useState("");
 
   useEffect(() => {
     fetchBindings();
@@ -138,6 +139,35 @@ export default function SMS() {
 
   const handleResetSMS = () => {
     setSmsFormData({ dongle_id: "", number: "", message: "" });
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxButtons = 7;
+
+    if (totalPages <= maxButtons) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (page <= 4) {
+        for (let i = 1; i <= 5; i++) pages.push(i);
+        pages.push("...");
+        pages.push(totalPages);
+      } else if (page >= totalPages - 3) {
+        pages.push(1);
+        pages.push("...");
+        for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push("...");
+        for (let i = page - 1; i <= page + 1; i++) pages.push(i);
+        pages.push("...");
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
   };
 
   if (loading && messages.length === 0) {
@@ -247,6 +277,7 @@ export default function SMS() {
                   <TableHead className="font-semibold">Dongle</TableHead>
                   <TableHead className="font-semibold">号码</TableHead>
                   <TableHead className="font-semibold">方向</TableHead>
+                  <TableHead className="font-semibold">推送状态</TableHead>
                   <TableHead className="font-semibold">内容</TableHead>
                   <TableHead className="font-semibold text-right">操作</TableHead>
                 </TableRow>
@@ -254,7 +285,7 @@ export default function SMS() {
               <TableBody>
                 {messages.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-12 text-center">
+                    <TableCell colSpan={8} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <p className="text-sm font-medium text-muted-foreground">暂无短信</p>
                       </div>
@@ -277,6 +308,17 @@ export default function SMS() {
                         <Badge variant={message.direction === "inbound" ? "default" : "secondary"}>
                           {message.direction === "inbound" ? "接收" : "发送"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {message.pushed ? (
+                          <Badge variant="default" className="bg-green-500">
+                            已推送 {message.pushed_at && `(${new Date(message.pushed_at).toLocaleTimeString('zh-CN')})`}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-gray-500">
+                            未推送
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="max-w-md truncate">{message.content}</TableCell>
                       <TableCell className="text-right">

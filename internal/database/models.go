@@ -108,6 +108,7 @@ type SMSMessage struct {
 	PhoneNumber string     `gorm:"type:varchar(50);not null;index" json:"phone_number"`     // 电话号码
 	Content     string     `gorm:"type:text;not null" json:"content"`                       // 短信内容
 	Direction   string     `gorm:"type:varchar(10);default:inbound;index" json:"direction"` // 方向：inbound（接收）或 outbound（发送）
+	SMSIndex    int        `gorm:"index" json:"sms_index"`                                 // SIM 卡短信索引
 	Pushed      bool       `gorm:"default:false;index" json:"pushed"`                       // 是否已推送
 	PushedAt    *time.Time `json:"pushed_at"`                                               // 推送时间
 	CreatedAt   time.Time  `json:"created_at"`
