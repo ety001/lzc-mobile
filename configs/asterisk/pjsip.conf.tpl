@@ -49,12 +49,11 @@ auth_type = userpass
 
 ; Extension configurations
 {{range .Extensions}}
-; AOR for {{.Username}} - 支持 TCP 和 UDP
+; AOR for {{.Username}}
 [{{.Username}}](aor-template)
 type = aor
 qualify_frequency = 60
 remove_existing = no
-; 不在 AOR 中指定 transport，允许客户端自动选择
 
 ; Auth for {{.Username}}
 [{{.Username}}](auth-template)
@@ -62,24 +61,13 @@ type = auth
 username = {{.Username}}
 password = {{.Secret}}
 
-; Endpoint for {{.Username}} - 使用 UDP
+; Endpoint for {{.Username}} - 支持 TCP 和 UDP
 [{{.Username}}](endpoint-template)
 type = endpoint
 auth = {{.Username}}
 aors = {{.Username}}
 {{if .CallerID}}callerid = {{.CallerID}}{{end}}
 {{if .Context}}context = {{.Context}}{{end}}
-transport = transport-udp
-
-; Endpoint for {{.Username}}-tcp - 使用 TCP
-[{{.Username}}-tcp](endpoint-template)
-type = endpoint
-auth = {{.Username}}
-aors = {{.Username}}
-{{if .CallerID}}callerid = {{.CallerID}}{{end}}
-{{if .Context}}context = {{.Context}}{{end}}
-transport = transport-tcp
-; TCP 特定配置
-t38_udptl = yes
-accepts_outofcall = yes
+; 不指定 transport，允许客户端自动选择 TCP 或 UDP
+; transport 将在客户端注册时根据实际连接协议自动匹配
 {{end}}

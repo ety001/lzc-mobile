@@ -20,7 +20,6 @@ const DEFAULT_FORM = {
   host: "dynamic",
   context: "default",
   port: "",
-  transport: "tcp",
 };
 
 export default function Extensions() {
@@ -77,7 +76,6 @@ export default function Extensions() {
       host: ext.host || "dynamic",
       context: ext.context || "default",
       port: ext.port ? String(ext.port) : "",
-      transport: ext.transport || "tcp",
     });
     setOpen(true);
   };
@@ -226,19 +224,6 @@ export default function Extensions() {
             <div className="grid gap-2">
               <Label htmlFor="port">Port（可选）</Label>
               <Input id="port" type="number" min={1} max={65535} placeholder="留空则不设置" value={formData.port} onChange={(e) => setFormData({ ...formData, port: e.target.value })} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Transport</Label>
-              <Select value={formData.transport} onValueChange={(value) => setFormData({ ...formData, transport: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择 Transport" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tcp+udp">TCP+UDP（推荐）</SelectItem>
-                  <SelectItem value="tcp">TCP</SelectItem>
-                  <SelectItem value="udp">UDP</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
