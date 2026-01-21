@@ -1,7 +1,9 @@
 package ami
 
 import (
+	"encoding/base64"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -121,6 +123,12 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 			device := msg.Field("Device")
 			number := msg.Field("Sender")
 			message := msg.Field("Message")
+			// 如果有 MessageBase64 字段,优先使用(避免特殊字符破坏 AMI 协议)
+			if messageBase64 := msg.Field("MessageBase64"); messageBase64 != "" {
+				if decoded, err := base64.StdEncoding.DecodeString(messageBase64); err == nil {
+					message = string(decoded)
+				}
+			}
 			if device != "" && number != "" && message != "" {
 				m.notifySMS(device, number, message)
 			}
@@ -158,6 +166,11 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 
 // notifySMS 通知订阅者收到短信
 func (m *Manager) notifySMS(device, number, message string) {
+	// 清理消息中的特殊字符,避免日志解析错误
+	// 将 \r 和 \n 替换为空格
+	message = strings.ReplaceAll(message, "\r", " ")
+	message = strings.ReplaceAll(message, "\n", " ")
+
 	m.mu.RLock()
 	subscribers := make([]StatusSubscriber, len(m.subscribers))
 	copy(subscribers, m.subscribers)

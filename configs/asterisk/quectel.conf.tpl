@@ -10,6 +10,7 @@ device=/dev/ttyUSB0
 audio=/dev/ttyUSB1
 data=/dev/ttyUSB2
 group=0
+context=quectel-incoming
 disable=no
 
 {{range .Dongles}}
@@ -20,6 +21,7 @@ disable=no
 {{if .Group}}group={{.Group}}{{end}}
 {{if .Audio}}audio={{.Audio}}{{end}}
 {{if .Data}}data={{.Data}}{{end}}
+{{if .Context}}context={{.Context}}{{end}}
 {{if .Disable}}disable={{.Disable}}{{end}}
 
 {{end}}
