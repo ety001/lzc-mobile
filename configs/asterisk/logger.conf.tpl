@@ -6,14 +6,13 @@ autoload=yes
 dateformat=%F %T
 
 [logfiles]
-; 配置 messages 日志文件
-messages => notice,warning,error
-; 配置 full 日志文件（包含调试信息）
-full => notice,warning,error,debug,verbose,dtmf,fax
+; 配置日志输出到标准输出（包含所有调试信息）
+; 使用绝对路径 /dev/stdout 输出到 Docker 日志驱动
+/dev/stdout => notice,warning,error,debug,verbose,dtmf,fax
 
 [logchannels]
 ; 控制台日志通道
-console => notice,warning,error
+; console => notice,warning,error
 
 ; 安全日志通道
 security => security
