@@ -297,12 +297,13 @@ func (c *Client) SendSMS(device, number, message string) error {
 	return c.SendAction(action)
 }
 
-// ListSMS 查询 SIM 卡中的所有短信
-// device: Dongle 设备名称（如 quectel0）
-// 返回短信列表（索引和内容）
-func (c *Client) ListSMS(device string) ([]SMSInfo, error) {
+// sendCommand 发送 AMI Command 并等待响应
+// command: 要执行的命令（如 "quectel cmd quectel0 AT+CMGF=1"）
+// timeout: 超时时间
+// 返回响应消息和错误
+func (c *Client) sendCommand(command string, timeout time.Duration) (*goami2.Message, error) {
 	action := goami2.NewAction("Command")
-	action.SetField("Command", fmt.Sprintf("quectel cmd %s AT+CMGL=4", device))
+	action.SetField("Command", command)
 	action.AddActionID()
 	actionID := action.Field("ActionID")
 
@@ -324,61 +325,95 @@ func (c *Client) ListSMS(device string) ([]SMSInfo, error) {
 
 	// 发送动作
 	if err := c.SendAction(action); err != nil {
-		return nil, fmt.Errorf("failed to send AT+CMGL command: %w", err)
+		return nil, fmt.Errorf("failed to send command: %w", err)
 	}
 
-	log.Printf("[SMS] Listing SMS from device %s (AT+CMGL=4)", device)
-
-	// 等待响应，最多等待 10 秒
+	// 等待响应
 	select {
 	case msg := <-responseCh:
 		// 检查响应状态
 		if msg.Field("Response") != "Success" {
-			return nil, fmt.Errorf("AT+CMGL command failed: %s", msg.Field("Message"))
+			return nil, fmt.Errorf("command failed: %s", msg.Field("Message"))
 		}
-
-		// 解析输出（data 字段包含命令输出）
-		output := msg.Field("data")
-		if output == "" {
-			return []SMSInfo{}, nil // 空列表，没有短信
-		}
-
-		// 解析 CMGL 输出格式
-		smsList := parseCMGL(output)
-		log.Printf("[SMS] Found %d SMS(s) on device %s", len(smsList), device)
-		return smsList, nil
-	case <-time.After(10 * time.Second):
-		return nil, fmt.Errorf("timeout waiting for AT+CMGL response")
+		return msg, nil
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("timeout waiting for command response")
 	}
+}
+
+// ListSMS 查询 SIM 卡中的所有短信
+// device: Dongle 设备名称（如 quectel0）
+// 返回短信列表（索引和内容）
+// 注意：需要先执行 AT+CMGF=1 设置文本模式，再执行 AT+CMGL="ALL" 获取所有短信
+func (c *Client) ListSMS(device string) ([]SMSInfo, error) {
+	// 步骤1：设置短信格式为文本模式（AT+CMGF=1）
+	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
+	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set SMS format (AT+CMGF=1): %w", err)
+	}
+
+	// 步骤2：列出所有短信（AT+CMGL="ALL"）
+	log.Printf("[SMS] Listing SMS from device %s (AT+CMGL=\"ALL\")", device)
+	msg, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGL=\"ALL\"", device), 10*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list SMS (AT+CMGL=\"ALL\"): %w", err)
+	}
+
+	// 解析输出（data 字段包含命令输出）
+	output := msg.Field("data")
+	if output == "" {
+		return []SMSInfo{}, nil // 空列表，没有短信
+	}
+
+	// 解析 CMGL 输出格式
+	smsList := parseCMGL(output)
+	log.Printf("[SMS] Found %d SMS(s) on device %s", len(smsList), device)
+	return smsList, nil
 }
 
 // DeleteSMS 删除 SIM 卡中的短信
 // device: Dongle 设备名称（如 quectel0）
 // index: SMS 在 SIM 卡中的索引（从 1 开始）
 // 使用 AT+CMGD 命令删除短信
+// 注意：需要先执行 AT+CMGF=1 设置文本模式
 func (c *Client) DeleteSMS(device string, index int) error {
-	// AT+CMGD=<index> 删除指定索引的短信
-	// index=4 删除所有短信
-	// index=1-4 删除索引 1-4 的短信
-	action := goami2.NewAction("Command")
-	action.SetField("Command", fmt.Sprintf("quectel cmd %s AT+CMGD=%d", device, index))
-	action.AddActionID()
+	// 步骤1：设置短信格式为文本模式（AT+CMGF=1）
+	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
+	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to set SMS format (AT+CMGF=1): %w", err)
+	}
 
+	// 步骤2：删除指定索引的短信（AT+CMGD=<index>）
 	log.Printf("[SMS] Deleting SMS from device %s at index %d (AT+CMGD=%d)", device, index, index)
+	_, err = c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGD=%d", device, index), 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to delete SMS (AT+CMGD=%d): %w", index, err)
+	}
 
-	return c.SendAction(action)
+	return nil
 }
 
 // DeleteAllSMS 删除 SIM 卡中的所有短信
 // device: Dongle 设备名称（如 quectel0）
+// 注意：需要先执行 AT+CMGF=1 设置文本模式
 func (c *Client) DeleteAllSMS(device string) error {
-	action := goami2.NewAction("Command")
-	action.SetField("Command", fmt.Sprintf("quectel cmd %s AT+CMGD=4", device))
-	action.AddActionID()
+	// 步骤1：设置短信格式为文本模式（AT+CMGF=1）
+	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
+	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to set SMS format (AT+CMGF=1): %w", err)
+	}
 
+	// 步骤2：删除所有短信（AT+CMGD=4）
 	log.Printf("[SMS] Deleting ALL SMS from device %s (AT+CMGD=4)", device)
+	_, err = c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGD=4", device), 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to delete all SMS (AT+CMGD=4): %w", err)
+	}
 
-	return c.SendAction(action)
+	return nil
 }
 
 // FindAndDeleteSMS 查找并删除匹配的短信

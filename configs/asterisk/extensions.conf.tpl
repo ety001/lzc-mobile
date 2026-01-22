@@ -48,12 +48,12 @@ exten => _X.,n,Hangup()
 ; 注意：Quectel 模块默认使用 incoming-mobile 上下文，我们也定义它以确保兼容
 [incoming-mobile]
 ; 处理收到的短信
-; 注意：通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析问题
+; 注意：通过 curl 调用 API 处理短信，避免 AMI 协议解析问题
 exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${BASE64_DECODE(${SMS_BASE64})})
 exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - From: ${CALLERID(num)} - Base64: ${SMS_BASE64}' >> /var/log/asterisk/sms.txt)
-; 通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析中文字符的问题
-; 参数：device sender message_base64 [timestamp] [sms_index]
-exten => sms,n,System(/app/webpanel sms ${QUECTELNAME} ${CALLERID(num)} ${SMS_BASE64} ${SMS_TIMESTAMP} ${SMS_INDEX})
+; 通过 curl 调用 API 处理短信，避免 AMI 协议解析中文字符的问题
+; 使用容器内的 webpanel 服务地址（localhost:8071）
+exten => sms,n,System(curl -X POST http://localhost:8071/api/v1/sms/receive -H "Content-Type: application/json" -d '{"device":"${QUECTELNAME}","sender":"${CALLERID(num)}","message":"${SMS_BASE64}","timestamp":"${SMS_TIMESTAMP}","sms_index":${SMS_INDEX}}' > /dev/null 2>&1)
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD
@@ -82,12 +82,12 @@ exten => s,n,Hangup()
 ; Quectel 设备上下文：处理来电、短信、USSD（别名，用于兼容）
 [quectel-incoming]
 ; 处理收到的短信
-; 注意：通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析问题
+; 注意：通过 curl 调用 API 处理短信，避免 AMI 协议解析问题
 exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${BASE64_DECODE(${SMS_BASE64})})
 exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - From: ${CALLERID(num)} - Base64: ${SMS_BASE64}' >> /var/log/asterisk/sms.txt)
-; 通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析中文字符的问题
-; 参数：device sender message_base64 [timestamp] [sms_index]
-exten => sms,n,System(/app/webpanel sms ${QUECTELNAME} ${CALLERID(num)} ${SMS_BASE64} ${SMS_TIMESTAMP} ${SMS_INDEX})
+; 通过 curl 调用 API 处理短信，避免 AMI 协议解析中文字符的问题
+; 使用容器内的 webpanel 服务地址（localhost:8071）
+exten => sms,n,System(curl -X POST http://localhost:8071/api/v1/sms/receive -H "Content-Type: application/json" -d '{"device":"${QUECTELNAME}","sender":"${CALLERID(num)}","message":"${SMS_BASE64}","timestamp":"${SMS_TIMESTAMP}","sms_index":${SMS_INDEX}}' > /dev/null 2>&1)
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD

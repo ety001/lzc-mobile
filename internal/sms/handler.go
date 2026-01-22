@@ -138,7 +138,21 @@ func (h *Handler) processSMS(req smsRequest) {
 
 	log.Printf("SMS message saved to database with ID %d (index=%d, SIM timestamp: %s)", smsMessage.ID, smsIndex, smsTime.Format("2006-01-02 15:04:05"))
 
-	// 注意：如果配置了 autodeletesms=yes，quectel 模块会自动删除短信
+	// 步骤2.5：入库成功后，清空 SIM 卡上的所有短信
+	// 这样可以避免冷启动时重复处理 SIM 卡上的短信
+	log.Printf("Deleting all SMS from SIM card on device %s to prevent duplicate processing", device)
+	amiManager := ami.GetManager()
+	client := amiManager.GetClient()
+	if client != nil {
+		if err := client.DeleteAllSMS(device); err != nil {
+			log.Printf("Warning: Failed to delete all SMS from device %s: %v", device, err)
+			// 不返回错误，继续处理通知
+		} else {
+			log.Printf("Successfully deleted all SMS from device %s", device)
+		}
+	} else {
+		log.Printf("Warning: AMI client not available, cannot delete SMS from device %s", device)
+	}
 
 	// 步骤3：发送通知
 	log.Printf("Sending notifications for SMS ID %d", smsMessage.ID)

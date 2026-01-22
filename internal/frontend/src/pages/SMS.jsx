@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus, Eye, Check, X, Loader2 } from "lucide-react";
+import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus, Eye, Check, X, Loader2, Trash } from "lucide-react";
 import { smsAPI } from "@/services/sms";
 import { dongleDeviceAPI } from "@/services/dongleDevices";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,10 @@ export default function SMS() {
   const [detailMessage, setDetailMessage] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [deletingIds, setDeletingIds] = useState([]); // 正在删除的短信ID列表
+  const [deleteSIMOpen, setDeleteSIMOpen] = useState(false);
+  const [deleteSIMDevice, setDeleteSIMDevice] = useState("");
+  const [deleteSIMConfirm, setDeleteSIMConfirm] = useState(false);
+  const [deletingSIM, setDeletingSIM] = useState(false);
 
   useEffect(() => {
     fetchDongles();
@@ -222,6 +226,10 @@ export default function SMS() {
           <Button onClick={() => setSendSMSOpen(true)}>
             <MessageSquarePlus className="mr-2 h-4 w-4" />
             发短信
+          </Button>
+          <Button variant="outline" onClick={() => setDeleteSIMOpen(true)}>
+            <Trash className="mr-2 h-4 w-4" />
+            删除SIM卡所有短信
           </Button>
           {selectedIds.length > 0 && (
             <AlertDialog>
@@ -638,6 +646,103 @@ export default function SMS() {
               <Button type="submit">发送</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteSIMOpen} onOpenChange={setDeleteSIMOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">删除 SIM 卡所有短信</DialogTitle>
+            <DialogDescription>此操作将删除指定设备 SIM 卡上的所有短信，此操作不可恢复。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="grid gap-2">
+              <Label htmlFor="delete-sim-dongle">选择设备</Label>
+              <Select
+                value={deleteSIMDevice}
+                onValueChange={(value) => {
+                  setDeleteSIMDevice(value);
+                  setDeleteSIMConfirm(false);
+                }}
+              >
+                <SelectTrigger id="delete-sim-dongle">
+                  <SelectValue placeholder="选择 Dongle 设备" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableDongles.map((dongle) => (
+                    <SelectItem key={dongle.device_id} value={dongle.device_id}>
+                      {dongle.device_id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {deleteSIMDevice && (
+              <div className="grid gap-2">
+                <Label>确认删除</Label>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="delete-sim-confirm"
+                    checked={deleteSIMConfirm}
+                    onCheckedChange={(checked) => setDeleteSIMConfirm(checked === true)}
+                  />
+                  <label
+                    htmlFor="delete-sim-confirm"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    我确认要删除设备 <span className="font-mono font-bold">{deleteSIMDevice}</span> 的 SIM 卡上的所有短信
+                  </label>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => {
+                setDeleteSIMOpen(false);
+                setDeleteSIMDevice("");
+                setDeleteSIMConfirm(false);
+              }}>
+                取消
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!deleteSIMDevice || !deleteSIMConfirm || deletingSIM}
+                onClick={async () => {
+                  if (!deleteSIMDevice || !deleteSIMConfirm) {
+                    toast.error("请选择设备并确认删除");
+                    return;
+                  }
+                  // 第二次确认
+                  const confirmed = window.confirm(`确定要删除设备 ${deleteSIMDevice} 的 SIM 卡上的所有短信吗？此操作不可恢复！`);
+                  if (!confirmed) {
+                    return;
+                  }
+                  setDeletingSIM(true);
+                  try {
+                    await smsAPI.deleteAllSIM(deleteSIMDevice);
+                    toast.success("SIM 卡所有短信已删除");
+                    setDeleteSIMOpen(false);
+                    setDeleteSIMDevice("");
+                    setDeleteSIMConfirm(false);
+                    fetchMessages(); // 刷新列表
+                  } catch (error) {
+                    toast.error("删除失败", { description: error.response?.data?.error || error.message });
+                  } finally {
+                    setDeletingSIM(false);
+                  }
+                }}
+              >
+                {deletingSIM ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    删除中...
+                  </>
+                ) : (
+                  "确认删除"
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

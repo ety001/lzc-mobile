@@ -1,13 +1,14 @@
 package web
 
 import (
+	"encoding/base64"
 	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/ety001/lzc-mobile/internal/ami"
-	"github.com/ety001/lzc-mobile/internal/at"
 	"github.com/ety001/lzc-mobile/internal/database"
+	"github.com/ety001/lzc-mobile/internal/sms"
 	"github.com/gin-gonic/gin"
 )
 
@@ -65,7 +66,7 @@ func (r *Router) listSMSMessages(c *gin.Context) {
 	})
 }
 
-// deleteSMSMessage 删除 SMS 消息
+// deleteSMSMessage 删除 SMS 消息（仅删除数据库记录）
 func (r *Router) deleteSMSMessage(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -77,45 +78,6 @@ func (r *Router) deleteSMSMessage(c *gin.Context) {
 	if err := database.DB.First(&message, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SMS message not found"})
 		return
-	}
-
-	// 如果是 inbound 短信,先尝试从 SIM 卡删除
-	if message.Direction == "inbound" {
-		devicePort, err := at.GetDevicePort(message.DongleID)
-		if err == nil {
-			// 成功获取端口,尝试删除 SIM 卡中的短信
-			executor := at.NewCommandExecutor(devicePort)
-			if message.SMSIndex > 0 {
-				// 有索引,直接删除
-				if err := executor.DeleteSMS(message.SMSIndex, 1); err != nil {
-					log.Printf("Warning: Failed to delete SMS from SIM card (index %d): %v", message.SMSIndex, err)
-				} else {
-					log.Printf("[SMS] Successfully deleted SMS from SIM card: index=%d, dongle=%s", message.SMSIndex, message.DongleID)
-				}
-			} else {
-				// 没有索引,尝试通过内容匹配删除
-				messages, err := executor.ListSMS()
-				if err == nil {
-					for _, msg := range messages {
-						if msg["number"] == message.PhoneNumber && msg["content"] == message.Content {
-							if idx, err := strconv.Atoi(msg["index"]); err == nil && idx > 0 {
-								if err := executor.DeleteSMS(idx, 1); err != nil {
-									log.Printf("Warning: Failed to delete SMS from SIM (matched index %d): %v", idx, err)
-								} else {
-									log.Printf("[SMS] Successfully deleted SMS from SIM card (matched): index=%d, dongle=%s", idx, message.DongleID)
-								}
-								break
-							}
-						}
-					}
-				} else {
-					log.Printf("Warning: Failed to list SMS from SIM: %v", err)
-				}
-			}
-		} else {
-			log.Printf("Warning: Failed to get device port for dongle %s: %v", message.DongleID, err)
-		}
-		// 即使 SIM 卡删除失败,也继续删除数据库记录
 	}
 
 	// 从数据库删除
@@ -182,4 +144,66 @@ func (r *Router) sendSMSDirect(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "SMS sent successfully"})
+}
+
+// DeleteAllSMSRequest 删除 SIM 卡所有短信请求
+type DeleteAllSMSRequest struct {
+	Device string `json:"device" binding:"required"` // 设备名（如 quectel0）
+}
+
+// deleteAllSMSFromSIM 删除 SIM 卡中的所有短信
+func (r *Router) deleteAllSMSFromSIM(c *gin.Context) {
+	var req DeleteAllSMSRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 通过 AMI 删除 SIM 卡中的所有短信
+	amiManager := ami.GetManager()
+	client := amiManager.GetClient()
+	if client == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AMI client not available"})
+		return
+	}
+
+	if err := client.DeleteAllSMS(req.Device); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete SMS from SIM card: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "All SMS deleted from SIM card successfully"})
+}
+
+// ReceiveSMSRequest 接收 SMS 请求结构（从 Asterisk 调用）
+type ReceiveSMSRequest struct {
+	Device    string `json:"device" binding:"required"`     // 设备名（如 quectel0）
+	Sender    string `json:"sender" binding:"required"`     // 发送者号码
+	Message   string `json:"message" binding:"required"`    // 短信内容（Base64 编码）
+	Timestamp string `json:"timestamp"`                     // 时间戳（可选）
+	SMSIndex  int    `json:"sms_index"`                     // SMS 索引（可选）
+}
+
+// receiveSMS 接收 SMS（从 Asterisk 内部调用，不需要认证）
+func (r *Router) receiveSMS(c *gin.Context) {
+	var req ReceiveSMSRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 解码 Base64 消息
+	messageBytes, err := base64.StdEncoding.DecodeString(req.Message)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Base64 message: " + err.Error()})
+		return
+	}
+	message := string(messageBytes)
+
+	// 创建 SMS handler 并处理短信
+	smsHandler := sms.NewHandler()
+	smsHandler.Register() // 注册到 AMI manager，以便可以获取 AMI client 来删除短信
+	smsHandler.OnSMSReceivedWithIndex(req.Device, req.Sender, message, req.Timestamp, req.SMSIndex)
+
+	c.JSON(http.StatusOK, gin.H{"message": "SMS received and queued for processing"})
 }

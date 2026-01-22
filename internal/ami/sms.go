@@ -18,11 +18,12 @@ type SMSInfo struct {
 }
 
 // parseCMGL 解析 AT+CMGL 命令的输出
-// 输入格式示例：
+// 输入格式示例（文本模式 AT+CMGF=1）：
 // +CMGL: 1,"REC READ","+861790013744",,"25/01/22 13:53:08+32"
 // Test message
 // +CMGL: 2,"REC READ","10010",,"25/01/22 13:50:00+32"
 // Another message
+// 注意：短信内容可能跨多行，直到遇到下一个 +CMGL 行或空行为止
 func parseCMGL(output string) []SMSInfo {
 	smsList := []SMSInfo{}
 
@@ -30,6 +31,7 @@ func parseCMGL(output string) []SMSInfo {
 	lines := strings.Split(output, "\n")
 
 	var currentSMS *SMSInfo
+	var contentLines []string
 
 	// 正则表达式匹配 CMGL 行
 	// 格式：+CMGL: <index>,"<status>","<sender>",,"<timestamp>"
@@ -37,12 +39,16 @@ func parseCMGL(output string) []SMSInfo {
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
 
 		// 检查是否是 CMGL 行
 		if matches := cmglRegex.FindStringSubmatch(line); matches != nil {
+			// 如果之前有未完成的短信，先保存它
+			if currentSMS != nil {
+				currentSMS.Content = strings.Join(contentLines, "\n")
+				smsList = append(smsList, *currentSMS)
+				contentLines = []string{}
+			}
+
 			// 解析索引
 			index, _ := strconv.Atoi(matches[1])
 
@@ -54,11 +60,23 @@ func parseCMGL(output string) []SMSInfo {
 				Timestamp: matches[4],
 			}
 		} else if currentSMS != nil {
-			// 这是短信内容行
-			currentSMS.Content = line
-			smsList = append(smsList, *currentSMS)
-			currentSMS = nil
+			// 这是短信内容行（可能跨多行）
+			if line != "" {
+				contentLines = append(contentLines, line)
+			} else if len(contentLines) > 0 {
+				// 遇到空行，如果已有内容，保存当前短信
+				currentSMS.Content = strings.Join(contentLines, "\n")
+				smsList = append(smsList, *currentSMS)
+				currentSMS = nil
+				contentLines = []string{}
+			}
 		}
+	}
+
+	// 处理最后一个短信（如果没有空行结尾）
+	if currentSMS != nil && len(contentLines) > 0 {
+		currentSMS.Content = strings.Join(contentLines, "\n")
+		smsList = append(smsList, *currentSMS)
 	}
 
 	return smsList

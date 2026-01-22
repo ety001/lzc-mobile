@@ -13,4 +13,5 @@ export const smsAPI = {
   send: (data) => api.post("/sms/send", data),
   delete: (id) => api.delete(`/sms/${id}`),
   deleteBatch: (ids) => api.delete("/sms", { data: { ids } }),
+  deleteAllSIM: (device) => api.post("/sms/delete-all-sim", { device }),
 };

@@ -36,10 +36,13 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		authGroup.POST("/logout", auth.Logout)
 	}
 
-	// API 路由（需要认证）
+	// API 路由（需要认证，但本地请求会自动跳过认证）
 	api := engine.Group("/api/v1")
 	api.Use(auth.CheckAuth)
 	{
+		// SMS 接收（从 Asterisk 内部调用，本地请求会自动跳过认证）
+		api.POST("/sms/receive", r.receiveSMS)
+
 		// Extension 管理
 		extensions := api.Group("/extensions")
 		{
@@ -96,9 +99,10 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		sms := api.Group("/sms")
 		{
 			sms.GET("", r.listSMSMessages)
-			sms.POST("/send", r.sendSMSDirect)   // 发送短信（通过 dongle_id）
+			sms.POST("/send", r.sendSMSDirect) // 发送短信（通过 dongle_id）
 			sms.DELETE("/:id", r.deleteSMSMessage)
-			sms.DELETE("", r.deleteSMSMessages) // 批量删除
+			sms.DELETE("", r.deleteSMSMessages)                // 批量删除
+			sms.POST("/delete-all-sim", r.deleteAllSMSFromSIM) // 删除 SIM 卡所有短信
 		}
 
 		// WebSocket 终端
