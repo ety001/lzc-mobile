@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus, Eye, Check, X } from "lucide-react";
 import { smsAPI } from "@/services/sms";
-import { dongleBindingAPI } from "@/services/dongleBindings";
+import { dongleDeviceAPI } from "@/services/dongleDevices";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +28,7 @@ export default function SMS() {
     dongle_id: "",
     direction: "",
   });
-  const [bindings, setBindings] = useState([]);
+  const [dongles, setDongles] = useState([]);
   const [sendSMSOpen, setSendSMSOpen] = useState(false);
   const [smsFormData, setSmsFormData] = useState({
     dongle_id: "",
@@ -40,19 +40,19 @@ export default function SMS() {
   const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
-    fetchBindings();
+    fetchDongles();
   }, []);
 
   useEffect(() => {
     fetchMessages();
   }, [page, filters]);
 
-  const fetchBindings = async () => {
+  const fetchDongles = async () => {
     try {
-      const response = await dongleBindingAPI.list();
-      setBindings(response.data);
+      const response = await dongleDeviceAPI.list();
+      setDongles(response.data);
     } catch (error) {
-      toast.error("获取 dongle 列表失败");
+      toast.error("获取 dongle 设备列表失败");
     }
   };
 
@@ -186,8 +186,8 @@ export default function SMS() {
     );
   }
 
-  // 获取唯一的 dongle ID 列表
-  const uniqueDongleIds = [...new Set(bindings.map((b) => b.dongle_id))];
+  // 获取可用的 dongle 设备列表（未禁用的）
+  const availableDongles = dongles.filter((d) => !d.disable);
 
   return (
     <div className="space-y-6">
@@ -238,9 +238,9 @@ export default function SMS() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部</SelectItem>
-                  {uniqueDongleIds.map((id) => (
-                    <SelectItem key={id} value={id}>
-                      {id}
+                  {availableDongles.map((dongle) => (
+                    <SelectItem key={dongle.device_id} value={dongle.device_id}>
+                      {dongle.device_id}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -552,9 +552,9 @@ export default function SMS() {
                   <SelectValue placeholder="选择 Dongle 设备" />
                 </SelectTrigger>
                 <SelectContent>
-                  {uniqueDongleIds.map((id) => (
-                    <SelectItem key={id} value={id}>
-                      {id}
+                  {availableDongles.map((dongle) => (
+                    <SelectItem key={dongle.device_id} value={dongle.device_id}>
+                      {dongle.device_id}
                     </SelectItem>
                   ))}
                 </SelectContent>
