@@ -1,6 +1,6 @@
 [general]
 interval=30
-autodelete=yes
+autodeletesms=yes
 u2diag=-1
 disable=no
 

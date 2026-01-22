@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,10 @@ type Client struct {
 	msgCh       chan *goami2.Message
 	responseChs map[string]chan *goami2.Message
 	responseMu  sync.RWMutex
+
+	// SIP peer 注册跟踪
+	peerRegistrations map[string]bool // peer => registered (true) 状态
+	peerRegMu         sync.RWMutex
 }
 
 // Status Asterisk 状态
@@ -84,12 +89,13 @@ func NewClient() (*Client, error) {
 	}
 
 	c := &Client{
-		conn:        conn,
-		client:      client,
-		status:      StatusUnknown,
-		errCh:       make(chan error, 10),
-		msgCh:       make(chan *goami2.Message, 100),
-		responseChs: make(map[string]chan *goami2.Message),
+		conn:              conn,
+		client:            client,
+		status:            StatusUnknown,
+		errCh:             make(chan error, 10),
+		msgCh:             make(chan *goami2.Message, 100),
+		responseChs:       make(map[string]chan *goami2.Message),
+		peerRegistrations: make(map[string]bool),
 	}
 
 	// 启动消息监听
@@ -128,6 +134,15 @@ func (c *Client) listen() {
 					}
 					c.mu.Unlock()
 					return
+				}
+				// 检查是否是协议解析错误（通常由非 ASCII 字符引起）
+				errStr := err.Error()
+				if strings.Contains(errStr, "invalid input") || strings.Contains(errStr, "AMI proto") {
+					// 这是协议解析错误，通常由非 ASCII 字符引起
+					// 记录错误但不中断连接，因为可能是单个消息的问题
+					log.Printf("AMI protocol parse error (likely non-ASCII characters in message): %v", err)
+					// 不发送到错误通道，避免中断处理流程
+					continue
 				}
 				log.Printf("AMI client error: %v", err)
 				c.errCh <- err
@@ -192,6 +207,12 @@ func (c *Client) handleMessage(msg *goami2.Message) {
 			c.status = StatusError
 		}
 		c.mu.Unlock()
+	case "PeerEntry":
+		// SIP peer 注册状态变更
+		c.handlePeerEntry(msg)
+	case "PeerStatus":
+		// SIP peer 状态变更
+		c.handlePeerStatus(msg)
 	}
 }
 
@@ -274,6 +295,117 @@ func (c *Client) SendSMS(device, number, message string) error {
 	log.Printf("[SMS] AMI Channel: %s", channel)
 
 	return c.SendAction(action)
+}
+
+// ListSMS 查询 SIM 卡中的所有短信
+// device: Dongle 设备名称（如 quectel0）
+// 返回短信列表（索引和内容）
+func (c *Client) ListSMS(device string) ([]SMSInfo, error) {
+	action := goami2.NewAction("Command")
+	action.SetField("Command", fmt.Sprintf("quectel cmd %s AT+CMGL=4", device))
+	action.AddActionID()
+	actionID := action.Field("ActionID")
+
+	// 创建响应通道
+	responseCh := make(chan *goami2.Message, 1)
+	c.responseMu.Lock()
+	c.responseChs[actionID] = responseCh
+	c.responseMu.Unlock()
+
+	// 确保清理响应通道
+	defer func() {
+		c.responseMu.Lock()
+		if _, exists := c.responseChs[actionID]; exists {
+			delete(c.responseChs, actionID)
+			close(responseCh)
+		}
+		c.responseMu.Unlock()
+	}()
+
+	// 发送动作
+	if err := c.SendAction(action); err != nil {
+		return nil, fmt.Errorf("failed to send AT+CMGL command: %w", err)
+	}
+
+	log.Printf("[SMS] Listing SMS from device %s (AT+CMGL=4)", device)
+
+	// 等待响应，最多等待 10 秒
+	select {
+	case msg := <-responseCh:
+		// 检查响应状态
+		if msg.Field("Response") != "Success" {
+			return nil, fmt.Errorf("AT+CMGL command failed: %s", msg.Field("Message"))
+		}
+
+		// 解析输出（data 字段包含命令输出）
+		output := msg.Field("data")
+		if output == "" {
+			return []SMSInfo{}, nil // 空列表，没有短信
+		}
+
+		// 解析 CMGL 输出格式
+		smsList := parseCMGL(output)
+		log.Printf("[SMS] Found %d SMS(s) on device %s", len(smsList), device)
+		return smsList, nil
+	case <-time.After(10 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for AT+CMGL response")
+	}
+}
+
+// DeleteSMS 删除 SIM 卡中的短信
+// device: Dongle 设备名称（如 quectel0）
+// index: SMS 在 SIM 卡中的索引（从 1 开始）
+// 使用 AT+CMGD 命令删除短信
+func (c *Client) DeleteSMS(device string, index int) error {
+	// AT+CMGD=<index> 删除指定索引的短信
+	// index=4 删除所有短信
+	// index=1-4 删除索引 1-4 的短信
+	action := goami2.NewAction("Command")
+	action.SetField("Command", fmt.Sprintf("quectel cmd %s AT+CMGD=%d", device, index))
+	action.AddActionID()
+
+	log.Printf("[SMS] Deleting SMS from device %s at index %d (AT+CMGD=%d)", device, index, index)
+
+	return c.SendAction(action)
+}
+
+// DeleteAllSMS 删除 SIM 卡中的所有短信
+// device: Dongle 设备名称（如 quectel0）
+func (c *Client) DeleteAllSMS(device string) error {
+	action := goami2.NewAction("Command")
+	action.SetField("Command", fmt.Sprintf("quectel cmd %s AT+CMGD=4", device))
+	action.AddActionID()
+
+	log.Printf("[SMS] Deleting ALL SMS from device %s (AT+CMGD=4)", device)
+
+	return c.SendAction(action)
+}
+
+// FindAndDeleteSMS 查找并删除匹配的短信
+// device: 设备名称
+// sender: 发送者号码
+// timestamp: SIM卡时间戳
+// content: 短信内容
+// 返回删除的索引和错误
+func (c *Client) FindAndDeleteSMS(device, sender, timestamp, content string) (int, error) {
+	// 1. 查询所有短信
+	smsList, err := c.ListSMS(device)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list SMS: %w", err)
+	}
+
+	// 2. 匹配短信
+	index := MatchSMS(sender, timestamp, content, smsList)
+	if index == 0 {
+		return 0, fmt.Errorf("no matching SMS found")
+	}
+
+	// 3. 删除短信
+	if err := c.DeleteSMS(device, index); err != nil {
+		return 0, fmt.Errorf("failed to delete SMS at index %d: %w", index, err)
+	}
+
+	return index, nil
 }
 
 // DongleStatus Dongle 设备状态
@@ -411,17 +543,8 @@ func (c *Client) getChannelCount() (int, error) {
 
 // getRegistrationCount 获取 SIP 注册数
 func (c *Client) getRegistrationCount() (int, error) {
-	action := goami2.NewAction("SIPPeers")
-	action.AddActionID()
-
-	if err := c.SendAction(action); err != nil {
-		return 0, err
-	}
-
-	// 简化实现：通过事件统计注册数
-	// 实际应该解析 SIPpeerEntry 事件
-	// 这里先返回 0，后续可以通过事件监听来更新
-	return 0, nil
+	// 通过监听 PeerStatus 事件统计注册数
+	return c.GetPeerRegistrationCount(), nil
 }
 
 // GetUptime 获取运行时间（秒）
@@ -513,4 +636,52 @@ func (c *Client) Close() error {
 		c.client = nil
 	}
 	return nil
+}
+
+// handlePeerEntry 处理 PeerEntry 事件（SIP peer 注册状态变更）
+func (c *Client) handlePeerEntry(msg *goami2.Message) {
+	peerName := msg.Field("ObjectName")
+	if peerName == "" {
+		return
+	}
+
+	// PeerEntry 事件通常在 SIP peer 注册或注销时触发
+	// 我们需要检查实际的注册状态
+	// 由于 PeerEntry 本身不直接提供注册状态，我们依赖 PeerStatus 事件
+	log.Printf("[AMI] PeerEntry event for %s", peerName)
+}
+
+// handlePeerStatus 处理 PeerStatus 事件（SIP peer 状态变更）
+func (c *Client) handlePeerStatus(msg *goami2.Message) {
+	peerName := msg.Field("Peer")
+	if peerName == "" {
+		return
+	}
+
+	peerStatus := msg.Field("Status")
+	// Status 格式: "Registered" 或 "Unregistered" 或 "Rejected"
+	registered := (peerStatus == "Registered")
+
+	c.peerRegMu.Lock()
+	oldStatus := c.peerRegistrations[peerName]
+	c.peerRegistrations[peerName] = registered
+	c.peerRegMu.Unlock()
+
+	if oldStatus != registered {
+		log.Printf("[AMI] Peer %s status changed: %v -> %v", peerName, oldStatus, registered)
+	}
+}
+
+// GetPeerRegistrationCount 获取已注册的 SIP peer 数量
+func (c *Client) GetPeerRegistrationCount() int {
+	c.peerRegMu.RLock()
+	defer c.peerRegMu.RUnlock()
+
+	count := 0
+	for _, registered := range c.peerRegistrations {
+		if registered {
+			count++
+		}
+	}
+	return count
 }

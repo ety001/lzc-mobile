@@ -2,7 +2,9 @@ package ami
 
 import (
 	"encoding/base64"
+	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -124,6 +126,7 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 			number := msg.Field("Sender")
 			message := msg.Field("Message")
 			timestamp := msg.Field("Timestamp")
+			smsIndexStr := msg.Field("SMSIndex")
 			// 如果有 MessageBase64 字段,优先使用(避免特殊字符破坏 AMI 协议)
 			if messageBase64 := msg.Field("MessageBase64"); messageBase64 != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(messageBase64); err == nil {
@@ -131,7 +134,14 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 				}
 			}
 			if device != "" && number != "" && message != "" {
-				m.notifySMS(device, number, message, timestamp)
+				// 解析短信索引
+				smsIndex := 0
+				if smsIndexStr != "" {
+					if idx, err := strconv.Atoi(smsIndexStr); err == nil {
+						smsIndex = idx
+					}
+				}
+				m.notifySMSWithIndex(device, number, message, timestamp, smsIndex)
 			}
 		} else if eventType == "DongleSMSReceived" || eventType == "QuectelSMSReceived" {
 			device := msg.Field("Device")
@@ -168,6 +178,11 @@ func (m *Manager) processMessage(msg *goami2.Message) {
 
 // notifySMS 通知订阅者收到短信
 func (m *Manager) notifySMS(device, number, message, timestamp string) {
+	m.notifySMSWithIndex(device, number, message, timestamp, 0)
+}
+
+// notifySMSWithIndex 通知订阅者收到短信（带索引）
+func (m *Manager) notifySMSWithIndex(device, number, message, timestamp string, smsIndex int) {
 	// 清理消息中的特殊字符,避免日志解析错误
 	// 将 \r 和 \n 替换为空格
 	message = strings.ReplaceAll(message, "\r", " ")
@@ -179,8 +194,31 @@ func (m *Manager) notifySMS(device, number, message, timestamp string) {
 	m.mu.RUnlock()
 
 	for _, sub := range subscribers {
-		sub.OnSMSReceived(device, number, message, timestamp)
+		// 尝试调用带索引的方法，如果不存在则调用不带索引的方法
+		if s, ok := sub.(interface {
+			OnSMSReceivedWithIndex(device, number, message, timestamp string, index int)
+		}); ok {
+			s.OnSMSReceivedWithIndex(device, number, message, timestamp, smsIndex)
+		} else {
+			sub.OnSMSReceived(device, number, message, timestamp)
+		}
 	}
+}
+
+// DeleteSMS 删除 SIM 卡中的短信
+func (m *Manager) DeleteSMS(device string, index int) error {
+	if m.client == nil {
+		return fmt.Errorf("AMI client not connected")
+	}
+	return m.client.DeleteSMS(device, index)
+}
+
+// DeleteAllSMS 删除 SIM 卡中的所有短信
+func (m *Manager) DeleteAllSMS(device string) error {
+	if m.client == nil {
+		return fmt.Errorf("AMI client not connected")
+	}
+	return m.client.DeleteAllSMS(device)
 }
 
 // statusUpdateLoop 状态更新循环

@@ -48,17 +48,17 @@ exten => _X.,n,Hangup()
 ; 注意：Quectel 模块默认使用 incoming-mobile 上下文，我们也定义它以确保兼容
 [incoming-mobile]
 ; 处理收到的短信
-; 注意：Quectel 模块会通过 AMI 事件发送短信，这里记录到日志
+; 注意：通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析问题
 exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${BASE64_DECODE(${SMS_BASE64})})
-exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - ${CALLERID(num)}: ${BASE64_DECODE(${SMS_BASE64})}' >> /var/log/asterisk/sms.txt)
-; 通过 AMI UserEvent 通知 Go 程序处理短信
-; 使用 BASE64 编码避免特殊字符破坏 AMI 协议
-exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},MessageBase64: ${SMS_BASE64},Timestamp: ${SMS_TIMESTAMP})
+exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - From: ${CALLERID(num)} - Base64: ${SMS_BASE64}' >> /var/log/asterisk/sms.txt)
+; 通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析中文字符的问题
+; 参数：device sender message_base64 [timestamp] [sms_index]
+exten => sms,n,System(/app/webpanel sms ${QUECTELNAME} ${CALLERID(num)} ${SMS_BASE64} ${SMS_TIMESTAMP} ${SMS_INDEX})
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD
 exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})})
-exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})}' >> /var/log/asterisk/ussd.txt)
+exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - Base64: ${USSD_BASE64}' >> /var/log/asterisk/ussd.txt)
 exten => ussd,n,Hangup()
 
 ; 处理来电：根据 QUECTELNAME 路由到绑定的 extension
@@ -82,17 +82,17 @@ exten => s,n,Hangup()
 ; Quectel 设备上下文：处理来电、短信、USSD（别名，用于兼容）
 [quectel-incoming]
 ; 处理收到的短信
-; 注意：Quectel 模块会通过 AMI 事件发送短信，这里记录到日志
+; 注意：通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析问题
 exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${BASE64_DECODE(${SMS_BASE64})})
-exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - ${CALLERID(num)}: ${BASE64_DECODE(${SMS_BASE64})}' >> /var/log/asterisk/sms.txt)
-; 通过 AMI UserEvent 通知 Go 程序处理短信
-; 使用 BASE64 编码避免特殊字符破坏 AMI 协议
-exten => sms,n,UserEvent(SMSReceived,Device: ${QUECTELNAME},Sender: ${CALLERID(num)},MessageBase64: ${SMS_BASE64},Timestamp: ${SMS_TIMESTAMP})
+exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - From: ${CALLERID(num)} - Base64: ${SMS_BASE64}' >> /var/log/asterisk/sms.txt)
+; 通过 System 调用 webpanel 子命令处理短信，避免 AMI 协议解析中文字符的问题
+; 参数：device sender message_base64 [timestamp] [sms_index]
+exten => sms,n,System(/app/webpanel sms ${QUECTELNAME} ${CALLERID(num)} ${SMS_BASE64} ${SMS_TIMESTAMP} ${SMS_INDEX})
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD
 exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})})
-exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME}: ${BASE64_DECODE(${USSD_BASE64})}' >> /var/log/asterisk/ussd.txt)
+exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - Base64: ${USSD_BASE64}' >> /var/log/asterisk/ussd.txt)
 exten => ussd,n,Hangup()
 
 ; 处理来电：根据 QUECTELNAME 路由到绑定的 extension

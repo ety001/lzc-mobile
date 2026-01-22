@@ -104,11 +104,19 @@ RUN chmod +x /entrypoint.sh
 # Create runtime dirs (keep same paths as current project expects)
 RUN mkdir -p \
     /var/lib/lzc-mobile \
+    /var/lib/asterisk \
+    /var/lib/asterisk/agi-bin \
     /var/log/asterisk \
     /var/run/asterisk \
     /var/spool/asterisk \
     /var/log/supervisor \
     /var/run/lock
+
+# Set initial permissions for directories
+# These will be refined in entrypoint.sh, but setting them here ensures
+# they exist with reasonable defaults even if entrypoint.sh fails
+RUN chown root:asterisk /var/lib/lzc-mobile /var/lib/asterisk /var/lib/asterisk/agi-bin /var/log/asterisk /var/run/asterisk /var/spool/asterisk 2>/dev/null || true && \
+    chmod 775 /var/lib/lzc-mobile /var/lib/asterisk /var/lib/asterisk/agi-bin /var/log/asterisk /var/run/asterisk /var/spool/asterisk 2>/dev/null || true
 
 # Fix lock directory permissions for chan_quectel
 # /var/lock is a symlink to /var/run/lock, chan_quectel needs write access

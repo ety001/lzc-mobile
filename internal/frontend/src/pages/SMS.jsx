@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus, Eye, Check, X } from "lucide-react";
+import { Trash2, ChevronLeft, ChevronRight, Filter, MessageSquarePlus, Eye, Check, X, Loader2 } from "lucide-react";
 import { smsAPI } from "@/services/sms";
 import { dongleDeviceAPI } from "@/services/dongleDevices";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ export default function SMS() {
   const [jumpPage, setJumpPage] = useState("");
   const [detailMessage, setDetailMessage] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [deletingIds, setDeletingIds] = useState([]); // 正在删除的短信ID列表
 
   useEffect(() => {
     fetchDongles();
@@ -45,6 +46,20 @@ export default function SMS() {
 
   useEffect(() => {
     fetchMessages();
+
+    // 第一页时设置自动刷新（5秒间隔）
+    let intervalId = null;
+    if (page === 1) {
+      intervalId = setInterval(() => {
+        fetchMessages();
+      }, 5000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, [page, filters]);
 
   const fetchDongles = async () => {
@@ -78,12 +93,15 @@ export default function SMS() {
   };
 
   const handleDelete = async (id) => {
+    setDeletingIds((prev) => [...prev, id]);
     try {
       await smsAPI.delete(id);
       toast.success("短信已删除");
-      fetchMessages();
+      await fetchMessages();
     } catch (error) {
       toast.error("删除失败", { description: error.response?.data?.error || error.message });
+    } finally {
+      setDeletingIds((prev) => prev.filter((i) => i !== id));
     }
   };
 
@@ -92,12 +110,16 @@ export default function SMS() {
       toast.error("请选择要删除的短信");
       return;
     }
+    setDeletingIds((prev) => [...prev, ...selectedIds]);
     try {
       await smsAPI.deleteBatch(selectedIds);
       toast.success(`已删除 ${selectedIds.length} 条短信`);
-      fetchMessages();
+      setSelectedIds([]);
+      await fetchMessages();
     } catch (error) {
       toast.error("批量删除失败", { description: error.response?.data?.error || error.message });
+    } finally {
+      setDeletingIds([]);
     }
   };
 
@@ -204,9 +226,18 @@ export default function SMS() {
           {selectedIds.length > 0 && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive">
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  删除选中 ({selectedIds.length})
+                <Button variant="destructive" disabled={deletingIds.length > 0}>
+                  {deletingIds.length > 0 ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      删除中...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      删除选中 ({selectedIds.length})
+                    </>
+                  )}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -304,7 +335,9 @@ export default function SMS() {
                         <Checkbox checked={selectedIds.includes(message.id)} onCheckedChange={() => toggleSelect(message.id)} />
                       </TableCell>
                       <TableCell className="font-mono text-xs">
-                        {new Date(message.created_at).toLocaleString("zh-CN")}
+                        {message.sms_timestamp
+                          ? new Date(message.sms_timestamp).toLocaleString("zh-CN")
+                          : new Date(message.created_at).toLocaleString("zh-CN")}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-mono">{message.dongle_id}</Badge>
@@ -344,8 +377,13 @@ export default function SMS() {
                                 size="sm"
                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                 title="删除"
+                                disabled={deletingIds.includes(message.id)}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                {deletingIds.includes(message.id) ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -478,11 +516,21 @@ export default function SMS() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-muted-foreground">时间</Label>
+                  <Label className="text-muted-foreground">SIM 时间</Label>
+                  <p className="font-mono text-sm mt-1">
+                    {detailMessage.sms_timestamp
+                      ? new Date(detailMessage.sms_timestamp).toLocaleString("zh-CN")
+                      : "未知"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">入库时间</Label>
                   <p className="font-mono text-sm mt-1">
                     {new Date(detailMessage.created_at).toLocaleString("zh-CN")}
                   </p>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground">方向</Label>
                   <p className="mt-1">
@@ -491,11 +539,10 @@ export default function SMS() {
                     </Badge>
                   </p>
                 </div>
-              </div>
-
-              <div>
-                <Label className="text-muted-foreground">Dongle 设备</Label>
-                <p className="font-mono text-sm mt-1">{detailMessage.dongle_id}</p>
+                <div>
+                  <Label className="text-muted-foreground">Dongle 设备</Label>
+                  <p className="font-mono text-sm mt-1">{detailMessage.dongle_id}</p>
+                </div>
               </div>
 
               <div>

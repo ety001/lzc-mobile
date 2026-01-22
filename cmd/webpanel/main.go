@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -16,6 +17,13 @@ import (
 )
 
 func main() {
+	// 检查是否是 sms 子命令
+	if len(os.Args) > 1 && os.Args[1] == "sms" {
+		runSMSCommand()
+		return
+	}
+
+	// 否则运行正常的 web 服务器
 	// 初始化数据库
 	if err := database.Init(); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -107,6 +115,59 @@ func main() {
 	if err := engine.Run(addr); err != nil {
 		log.Fatalf("Failed to start web server: %v", err)
 	}
+}
+
+// runSMSCommand 处理 SMS 子命令
+// 用法: webpanel sms <device> <sender> <message_base64> [timestamp] [sms_index]
+func runSMSCommand() {
+	if len(os.Args) < 5 {
+		log.Fatalf("Usage: %s sms <device> <sender> <message_base64> [timestamp] [sms_index]", os.Args[0])
+	}
+
+	// 初始化数据库
+	if err := database.Init(); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	device := os.Args[2]
+	sender := os.Args[3]
+	messageBase64 := os.Args[4]
+
+	// 如果 Base64 为空，直接退出
+	if messageBase64 == "" {
+		log.Println("Empty message base64, skipping")
+		return
+	}
+
+	// 解码 Base64 消息
+	messageBytes, err := base64.StdEncoding.DecodeString(messageBase64)
+	if err != nil {
+		log.Fatalf("Failed to decode Base64 message: %v", err)
+	}
+	message := string(messageBytes)
+
+	// 可选参数（处理空字符串的情况）
+	timestamp := ""
+	if len(os.Args) > 5 && os.Args[5] != "" {
+		timestamp = os.Args[5]
+	}
+
+	smsIndex := 0
+	if len(os.Args) > 6 && os.Args[6] != "" {
+		if idx, err := fmt.Sscanf(os.Args[6], "%d", &smsIndex); err != nil || idx != 1 {
+			log.Printf("Warning: Invalid SMS index '%s', using 0", os.Args[6])
+		}
+	}
+
+	log.Printf("Processing SMS: device=%s, sender=%s, index=%d, timestamp=%s", device, sender, smsIndex, timestamp)
+
+	// 创建 SMS handler 并处理短信
+	smsHandler := sms.NewHandler()
+	smsHandler.OnSMSReceivedWithIndex(device, sender, message, timestamp, smsIndex)
+
+	// 等待处理完成（给一些时间让队列处理）
+	time.Sleep(2 * time.Second)
+	log.Println("SMS processing completed")
 }
 
 // reloadAsteriskManager 重新加载 Asterisk manager 配置

@@ -24,9 +24,11 @@ func Init() error {
 
 	// 确保目录存在
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		return err
 	}
+	// 确保目录可写
+	os.Chmod(dir, 0777)
 
 	// 连接数据库
 	var err error

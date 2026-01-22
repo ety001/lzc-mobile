@@ -32,16 +32,88 @@ export LAZYCAT_AUTH_OIDC_REDIRECT_URI="${LAZYCAT_AUTH_OIDC_REDIRECT_URI:-/auth/o
 
 # 创建必要的目录
 mkdir -p /var/lib/lzc-mobile
+mkdir -p /var/lib/asterisk
+mkdir -p /var/lib/asterisk/agi-bin
 mkdir -p /var/log/asterisk
 mkdir -p /var/log/supervisor
 mkdir -p /var/run/asterisk
+mkdir -p /var/spool/asterisk
 mkdir -p /etc/asterisk
 
-# 设置权限
-chmod 755 /var/lib/lzc-mobile
-chmod 755 /var/log/asterisk
-chmod 755 /var/run/asterisk
-chmod 755 /etc/asterisk
+# 设置权限函数：确保目录对 root 和 asterisk 用户都可访问
+# 参数：目录路径 权限模式 是否可写
+set_directory_permissions() {
+    local dir="$1"
+    local mode="$2"
+    local writable="${3:-false}"
+    
+    if [ "$writable" = "true" ]; then
+        # 可写目录：组设置为 asterisk，权限 775（rwxrwxr-x）
+        # 这样 root 和 asterisk 用户都可以写入
+        chown root:asterisk "$dir" 2>/dev/null || chmod "$mode" "$dir" 2>/dev/null || true
+        chmod 775 "$dir" 2>/dev/null || true
+    else
+        # 只读目录：组设置为 asterisk，权限 755（rwxr-xr-x）
+        # root 可写，asterisk 可读
+        chown root:asterisk "$dir" 2>/dev/null || chmod "$mode" "$dir" 2>/dev/null || true
+        chmod 755 "$dir" 2>/dev/null || true
+    fi
+}
+
+# 设置文件权限：确保文件对 root 和 asterisk 用户都可访问
+# 参数：文件路径 权限模式
+set_file_permissions() {
+    local file="$1"
+    local mode="$2"
+    
+    # 可写文件：组设置为 asterisk，权限 664（rw-rw-r--）
+    # 这样 root 和 asterisk 用户都可以写入
+    chown root:asterisk "$file" 2>/dev/null || chmod "$mode" "$file" 2>/dev/null || true
+    chmod 664 "$file" 2>/dev/null || true
+}
+
+# ============================================================================
+# 权限设置说明：
+# - Supervisor 以 root 用户启动所有进程
+# - Asterisk 启动后会降级到 asterisk 用户运行（通过 runuser/rungroup 配置）
+# - webpanel 以 root 用户运行（需要访问数据库和 AMI）
+# - 所有需要写入的目录设置为 root:asterisk 组，权限 775（rwxrwxr-x）
+# - 所有需要写入的文件设置为 root:asterisk 组，权限 664（rw-rw-r--）
+# ============================================================================
+
+# 设置应用数据目录权限（root 和 asterisk 都可写）
+set_directory_permissions /var/lib/lzc-mobile 755 true
+
+# 确保数据库文件可写（如果存在）
+# 注意：新创建的数据库文件会在 Go 代码中创建，需要确保目录权限正确
+if [ -f /var/lib/lzc-mobile/data.db ]; then
+    set_file_permissions /var/lib/lzc-mobile/data.db 664
+fi
+
+# 设置 Asterisk 相关目录权限
+# /var/log/asterisk - 日志目录，需要 root 和 asterisk 都可写
+# System() 调用（root）和 Asterisk 进程（asterisk）都需要写入日志
+set_directory_permissions /var/log/asterisk 755 true
+
+# /var/run/asterisk - 运行时目录，需要 root 和 asterisk 都可写
+# 用于存储 PID 文件、socket 等运行时文件
+set_directory_permissions /var/run/asterisk 755 true
+
+# /var/spool/asterisk - 临时文件目录，需要 root 和 asterisk 都可写
+# 用于存储录音、传真等临时文件
+set_directory_permissions /var/spool/asterisk 755 true
+
+# /etc/asterisk - 配置目录，root 可写，asterisk 可读
+# 配置文件由 webpanel（root）生成，Asterisk（asterisk）读取
+set_directory_permissions /etc/asterisk 755 false
+
+# /var/lib/asterisk - Asterisk 数据目录，需要 root 和 asterisk 都可写
+# 用于存储数据库、密钥等数据文件
+set_directory_permissions /var/lib/asterisk 755 true
+
+# /var/lib/asterisk/agi-bin - AGI 脚本目录，需要 root 和 asterisk 都可写
+# 用于存储 AGI 脚本
+set_directory_permissions /var/lib/asterisk/agi-bin 755 true
 
 # 修复设备权限函数
 # 修复 ttyUSB 设备权限，确保 asterisk 用户可以访问
