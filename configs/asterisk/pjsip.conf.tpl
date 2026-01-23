@@ -22,10 +22,13 @@ cos = 5
 type = endpoint
 context = default
 disallow = all
+; 只使用 ulaw 和 alaw，避免 g729 转码问题
+; 注意：Asterisk Alpine 包不包含 g729 转码模块（codec_g729.so）
+; 如果客户端使用 g729，需要客户端配置为使用 ulaw 或安装转码模块
 allow = ulaw
 allow = alaw
 allow = gsm
-allow = g729
+; allow = g729  ; 已禁用，因为缺少转码模块
 direct_media = no
 rtp_symmetric = yes
 force_rport = yes
@@ -53,7 +56,7 @@ auth_type = userpass
 [{{.Username}}](aor-template)
 type = aor
 qualify_frequency = 60
-remove_existing = no
+remove_existing = yes
 
 ; Auth for {{.Username}}
 [{{.Username}}](auth-template)

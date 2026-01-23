@@ -25,6 +25,7 @@ exten => _{{.DialPrefix}}X.,n,Hangup()
 {{range .Extensions}}
 exten => {{.Username}},1,NoOp(Call from ${CALLERID(num)} to extension {{.Username}})
 exten => {{.Username}},n,Dial(PJSIP/{{.Username}},30)
+exten => {{.Username}},n,NoOp(Dial completed with status: ${DIALSTATUS})
 exten => {{.Username}},n,Hangup()
 {{end}}
 
@@ -53,7 +54,7 @@ exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${B
 exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - From: ${CALLERID(num)} - Base64: ${SMS_BASE64}' >> /var/log/asterisk/sms.txt)
 ; 通过 curl 调用 API 处理短信，避免 AMI 协议解析中文字符的问题
 ; 使用容器内的 webpanel 服务地址（localhost:8071）
-exten => sms,n,System(curl -X POST http://localhost:8071/api/v1/sms/receive -H "Content-Type: application/json" -d '{"device":"${QUECTELNAME}","sender":"${CALLERID(num)}","message":"${SMS_BASE64}","timestamp":"${SMS_TIMESTAMP}","sms_index":${SMS_INDEX}}' > /dev/null 2>&1)
+exten => sms,n,System(curl -X POST http://localhost:8071/api/v1/sms/receive -H "Content-Type: application/json" -d '{"device":"${QUECTELNAME}","sender":"${CALLERID(num)}","message":"${SMS_BASE64}","timestamp":"${SMS_TIMESTAMP}"}' > /dev/null 2>&1)
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD
@@ -87,7 +88,7 @@ exten => sms,1,Verbose(Incoming SMS from ${CALLERID(num)} on ${QUECTELNAME}: ${B
 exten => sms,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - From: ${CALLERID(num)} - Base64: ${SMS_BASE64}' >> /var/log/asterisk/sms.txt)
 ; 通过 curl 调用 API 处理短信，避免 AMI 协议解析中文字符的问题
 ; 使用容器内的 webpanel 服务地址（localhost:8071）
-exten => sms,n,System(curl -X POST http://localhost:8071/api/v1/sms/receive -H "Content-Type: application/json" -d '{"device":"${QUECTELNAME}","sender":"${CALLERID(num)}","message":"${SMS_BASE64}","timestamp":"${SMS_TIMESTAMP}","sms_index":${SMS_INDEX}}' > /dev/null 2>&1)
+exten => sms,n,System(curl -X POST http://localhost:8071/api/v1/sms/receive -H "Content-Type: application/json" -d '{"device":"${QUECTELNAME}","sender":"${CALLERID(num)}","message":"${SMS_BASE64}","timestamp":"${SMS_TIMESTAMP}"}' > /dev/null 2>&1)
 exten => sms,n,Hangup()
 
 ; 处理收到的 USSD
