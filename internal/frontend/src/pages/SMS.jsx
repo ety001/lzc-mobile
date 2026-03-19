@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 
 export default function SMS() {
   const [messages, setMessages] = useState([]);
@@ -43,6 +44,8 @@ export default function SMS() {
   const [deleteSIMDevice, setDeleteSIMDevice] = useState("");
   const [deleteSIMConfirm, setDeleteSIMConfirm] = useState(false);
   const [deletingSIM, setDeletingSIM] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);  // 自动刷新开关
+  const [highlightedIds, setHighlightedIds] = useState([]);  // 需要高亮的短信ID
 
   useEffect(() => {
     fetchDongles();
@@ -51,11 +54,11 @@ export default function SMS() {
   useEffect(() => {
     fetchMessages();
 
-    // 第一页时设置自动刷新（5秒间隔）
+    // 第一页且开启自动刷新时设置自动刷新（5秒间隔）
     let intervalId = null;
-    if (page === 1) {
+    if (page === 1 && autoRefresh) {
       intervalId = setInterval(() => {
-        fetchMessages();
+        fetchMessages(true);  // 传入 true 表示自动刷新
       }, 5000);
     }
 
@@ -64,7 +67,7 @@ export default function SMS() {
         clearInterval(intervalId);
       }
     };
-  }, [page, filters]);
+  }, [page, filters, autoRefresh]);
 
   const fetchDongles = async () => {
     try {
@@ -75,8 +78,12 @@ export default function SMS() {
     }
   };
 
-  const fetchMessages = async () => {
-    setLoading(true);
+  const fetchMessages = async (isAuto = false) => {
+    // 只在非自动刷新时设置 loading
+    if (!isAuto) {
+      setLoading(true);
+    }
+
     try {
       const params = {
         page,
@@ -85,14 +92,45 @@ export default function SMS() {
       };
       const response = await smsAPI.list(params);
       console.log("SMS API response:", response);
-      setMessages(response.data?.data || []);
+      const newMessages = response.data?.data || [];
+
+      if (isAuto && page === 1) {
+        // 自动刷新时，只追加新数据（根据 ID 判断）
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const trulyNew = newMessages.filter(m => !existingIds.has(m.id));
+          if (trulyNew.length > 0) {
+            // 标记新数据需要高亮
+            const newIds = trulyNew.map(m => m.id);
+            setHighlightedIds(newIds);
+
+            // 2秒后移除高亮
+            setTimeout(() => {
+              setHighlightedIds([]);
+            }, 2000);
+
+            return [...trulyNew, ...prev];  // 新数据插入到前面
+          }
+          return prev;  // 没有新数据，返回原数组（避免重新渲染）
+        });
+        // 自动刷新时不清空选中项
+      } else {
+        // 手动刷新时，完全替换
+        setMessages(newMessages);
+        setSelectedIds([]);
+        setHighlightedIds([]);  // 清空高亮
+      }
+
       setTotal(response.data?.total || 0);
       setTotalPages(response.data?.total_pages || 0);
-      setSelectedIds([]);
     } catch (error) {
-      toast.error("获取短信列表失败");
+      if (!isAuto) {
+        toast.error("获取短信列表失败");
+      }
     } finally {
-      setLoading(false);
+      if (!isAuto) {
+        setLoading(false);
+      }
     }
   };
 
@@ -309,6 +347,24 @@ export default function SMS() {
               <CardTitle>短信列表</CardTitle>
               <CardDescription className="mt-1">共 {total} 条短信</CardDescription>
             </div>
+            <div className="flex items-center gap-3">
+              {/* Loading 动画 */}
+              {loading && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+
+              {/* 自动刷新开关 */}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="auto-refresh" className="text-sm text-muted-foreground">
+                  自动刷新
+                </Label>
+                <Switch
+                  id="auto-refresh"
+                  checked={autoRefresh}
+                  onCheckedChange={setAutoRefresh}
+                />
+              </div>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -338,7 +394,12 @@ export default function SMS() {
                   </TableRow>
                 ) : (
                   messages.map((message) => (
-                    <TableRow key={message.id} className="hover:bg-muted/50">
+                    <TableRow
+                      key={message.id}
+                      className={`hover:bg-muted/50 transition-colors ${
+                        highlightedIds.includes(message.id) ? 'bg-green-100 dark:bg-green-900/30' : ''
+                      }`}
+                    >
                       <TableCell>
                         <Checkbox checked={selectedIds.includes(message.id)} onCheckedChange={() => toggleSelect(message.id)} />
                       </TableCell>
