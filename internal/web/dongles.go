@@ -13,7 +13,7 @@ import (
 
 // 操作锁（防止重复提交）
 var (
-	deviceMutex sync.Mutex
+	deviceMutex  sync.Mutex
 	bindingMutex sync.Mutex
 )
 

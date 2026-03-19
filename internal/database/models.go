@@ -88,15 +88,15 @@ type Extension struct {
 
 // Dongle USB Dongle 设备配置
 type Dongle struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	DeviceID    string    `gorm:"type:varchar(100);not null;uniqueIndex" json:"device_id"` // quectel0, quectel1
-	Device      string    `gorm:"type:varchar(255)" json:"device"`      // /dev/ttyUSB0
-	Audio       string    `gorm:"type:varchar(255)" json:"audio"`       // /dev/ttyUSB1
-	Data        string    `gorm:"type:varchar(255)" json:"data"`        // /dev/ttyUSB2
-	Group       int       `gorm:"default:0" json:"group"`              // 组号（默认 0）
-	Context     string    `gorm:"type:varchar(100);default:quectel-incoming" json:"context"` // 来电上下文
-	DialPrefix  string    `gorm:"type:varchar(10);default:999" json:"dial_prefix"` // 外呼前缀
-	Disable     bool      `gorm:"default:false" json:"disable"`        // 是否禁用
+	ID         uint   `gorm:"primaryKey" json:"id"`
+	DeviceID   string `gorm:"type:varchar(100);not null;uniqueIndex" json:"device_id"`   // quectel0, quectel1
+	Device     string `gorm:"type:varchar(255)" json:"device"`                           // /dev/ttyUSB0
+	Audio      string `gorm:"type:varchar(255)" json:"audio"`                            // /dev/ttyUSB1
+	Data       string `gorm:"type:varchar(255)" json:"data"`                             // /dev/ttyUSB2
+	Group      int    `gorm:"default:0" json:"group"`                                    // 组号（默认 0）
+	Context    string `gorm:"type:varchar(100);default:quectel-incoming" json:"context"` // 来电上下文
+	DialPrefix string `gorm:"type:varchar(10);default:999" json:"dial_prefix"`           // 外呼前缀
+	Disable    bool   `gorm:"default:false" json:"disable"`                              // 是否禁用
 
 	// 运行时状态（从 AMI 获取，不持久化）
 	IMEI           string `gorm:"-" json:"imei,omitempty"`
@@ -105,8 +105,8 @@ type Dongle struct {
 	SignalStrength int    `gorm:"-" json:"signal_strength,omitempty"`
 	Status         string `gorm:"-" json:"status,omitempty"` // unknown, online, offline
 
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // DongleBinding Dongle 来去电绑定关系
@@ -115,10 +115,10 @@ type DongleBinding struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	DongleID    string    `gorm:"type:varchar(100);not null;index" json:"dongle_id"` // Dongle 设备 ID（如 quectel0）
 	Dongle      Dongle    `gorm:"foreignKey:DongleID;references:DeviceID" json:"dongle"`
-	ExtensionID uint      `gorm:"not null;index" json:"extension_id"`                // 关联的 Extension ID
-	Extension   Extension `gorm:"foreignKey:ExtensionID" json:"extension"`           // 外键关联
-	Inbound     bool      `gorm:"default:true" json:"inbound"`                       // 是否处理来电
-	Outbound    bool      `gorm:"default:true" json:"outbound"`                      // 是否处理去电
+	ExtensionID uint      `gorm:"not null;index" json:"extension_id"`      // 关联的 Extension ID
+	Extension   Extension `gorm:"foreignKey:ExtensionID" json:"extension"` // 外键关联
+	Inbound     bool      `gorm:"default:true" json:"inbound"`             // 是否处理来电
+	Outbound    bool      `gorm:"default:true" json:"outbound"`            // 是否处理去电
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -130,10 +130,10 @@ type SMSMessage struct {
 	PhoneNumber  string     `gorm:"type:varchar(50);not null;index" json:"phone_number"`     // 电话号码
 	Content      string     `gorm:"type:text;not null" json:"content"`                       // 短信内容
 	Direction    string     `gorm:"type:varchar(10);default:inbound;index" json:"direction"` // 方向：inbound（接收）或 outbound（发送）
-	SMSIndex     int        `gorm:"index" json:"sms_index"`                                 // SIM 卡短信索引
-	SMSTimestamp *time.Time `json:"sms_timestamp"`                                        // SIM 卡短信时间戳
+	SMSIndex     int        `gorm:"index" json:"sms_index"`                                  // SIM 卡短信索引
+	SMSTimestamp *time.Time `json:"sms_timestamp"`                                           // SIM 卡短信时间戳
 	Pushed       bool       `gorm:"default:false;index" json:"pushed"`                       // 是否已推送
-	PushedAt     *time.Time `json:"pushed_at"`                                             // 推送时间
+	PushedAt     *time.Time `json:"pushed_at"`                                               // 推送时间
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
@@ -141,9 +141,9 @@ type SMSMessage struct {
 // AdminUser 管理员用户
 type AdminUser struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	Email     string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"email"`     // OIDC 返回的邮箱
-	Name      string    `gorm:"type:varchar(255)" json:"name"`                           // 用户名
-	Subject   string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"subject"`   // OIDC subject (唯一标识)
+	Email     string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"email"`   // OIDC 返回的邮箱
+	Name      string    `gorm:"type:varchar(255)" json:"name"`                         // 用户名
+	Subject   string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"subject"` // OIDC subject (唯一标识)
 	CreatedAt time.Time `json:"created_at"`
 }
 

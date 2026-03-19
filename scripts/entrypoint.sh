@@ -75,7 +75,7 @@ set_file_permissions() {
 # ============================================================================
 # 权限设置说明：
 # - Supervisor 以 root 用户启动所有进程
-# - Asterisk 启动后会降级到 asterisk 用户运行（通过 runuser/rungroup 配置）
+# - Asterisk 直接以 asterisk 用户启动（通过 Supervisor user 配置）
 # - webpanel 以 root 用户运行（需要访问数据库和 AMI）
 # - 所有需要写入的目录设置为 root:asterisk 组，权限 775（rwxrwxr-x）
 # - 所有需要写入的文件设置为 root:asterisk 组，权限 664（rw-rw-r--）
@@ -114,6 +114,10 @@ set_directory_permissions /var/lib/asterisk 755 true
 # /var/lib/asterisk/agi-bin - AGI 脚本目录，需要 root 和 asterisk 都可写
 # 用于存储 AGI 脚本
 set_directory_permissions /var/lib/asterisk/agi-bin 755 true
+
+# 注意：smsdb.sqlite3 现在由 chan_quectel 以 asterisk 用户自动创建
+# 由于 Asterisk 现在直接以 asterisk 用户启动（通过 Supervisor user 配置）
+# 不再需要预先创建和设置权限
 
 # 修复设备权限函数
 # 修复 ttyUSB 设备权限，确保 asterisk 用户可以访问

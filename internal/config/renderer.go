@@ -42,14 +42,14 @@ type DongleBindingData struct {
 
 // DongleData Dongle 设备模板数据
 type DongleData struct {
-	DeviceID   string // quectel0, quectel1
-	Device     string // /dev/ttyUSB0
-	Audio      string // /dev/ttyUSB1
-	Data       string // /dev/ttyUSB2
-	Group      int    // 组号（默认 0）
-	Context    string // 来电上下文
-	DialPrefix string // 外呼前缀
-	Disable    bool   // 是否禁用
+	DeviceID    string // quectel0, quectel1
+	Device      string // /dev/ttyUSB0
+	Audio       string // /dev/ttyUSB1
+	Data        string // /dev/ttyUSB2
+	Group       int    // 组号（默认 0）
+	Context     string // 来电上下文
+	DialPrefix  string // 外呼前缀
+	Disable     bool   // 是否禁用
 }
 
 // Renderer 配置渲染器
@@ -144,11 +144,11 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 	data.Dongles = make([]DongleData, len(dongles))
 	for i, dongle := range dongles {
 		data.Dongles[i] = DongleData{
-			DeviceID:   dongle.DeviceID,
-			Device:     dongle.Device,
-			Audio:      dongle.Audio,
-			Data:       dongle.Data,
-			Group:      dongle.Group,
+			DeviceID:    dongle.DeviceID,
+			Device:      dongle.Device,
+			Audio:       dongle.Audio,
+			Data:        dongle.Data,
+			Group:       dongle.Group,
 			Context:    dongle.Context,
 			DialPrefix: dongle.DialPrefix,
 			Disable:    dongle.Disable,

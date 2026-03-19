@@ -123,6 +123,10 @@ RUN chown root:asterisk /var/lib/lzc-mobile /var/lib/asterisk /var/lib/asterisk/
 RUN chown root:dialout /var/run/lock && \
     chmod 775 /var/run/lock
 
+# Add asterisk user to dialout group for lock file access
+# Required when Supervisor starts Asterisk as asterisk user (not root)
+RUN adduser asterisk dialout 2>/dev/null || true
+
 EXPOSE 8071
 
 ENTRYPOINT ["/entrypoint.sh"]

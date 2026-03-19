@@ -285,9 +285,10 @@ func (c *Client) SendSMS(device, number, message string) error {
 	action.SetField("Exten", number)
 	action.SetField("Priority", "1")
 	action.SetField("Async", "true")
-	// 使用 AddField 添加多个 Variable 字段，__ 前缀会导出到目标 channel
-	// AddField 会添加新字段而不是覆盖同名字段
-	action.AddField("Variable", fmt.Sprintf("__QUECTEL_DEVICE=%s", device))
+	// 添加多个 Variable 字段
+	// __ 前缀会导出到目标 channel
+	// 第一个变量用 SetField，第二个用 AddField
+	action.SetField("Variable", fmt.Sprintf("__QUECTEL_DEVICE=%s", device))
 	action.AddField("Variable", fmt.Sprintf("__SMS_MESSAGE=%s", message))
 	action.AddActionID()
 
@@ -350,8 +351,12 @@ func (c *Client) ListSMS(device string) ([]SMSInfo, error) {
 	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
 	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set SMS format (AT+CMGF=1): %w", err)
+		// 如果设置文本模式失败，可能设备已经是文本模式，继续尝试列出短信
+		log.Printf("[SMS] Warning: failed to set SMS format (AT+CMGF=1): %v", err)
 	}
+
+	// 等待设备处理模式切换
+	time.Sleep(500 * time.Millisecond)
 
 	// 步骤2：列出所有短信（AT+CMGL="ALL"）
 	log.Printf("[SMS] Listing SMS from device %s (AT+CMGL=\"ALL\")", device)
@@ -382,14 +387,19 @@ func (c *Client) DeleteSMS(device string, index int) error {
 	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
 	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to set SMS format (AT+CMGF=1): %w", err)
+		// 如果设置文本模式失败，可能设备已经是文本模式，继续尝试删除
+		log.Printf("[SMS] Warning: failed to set SMS format (AT+CMGF=1): %v", err)
 	}
 
-	// 步骤2：删除指定索引的短信（AT+CMGD=<index>）
-	log.Printf("[SMS] Deleting SMS from device %s at index %d (AT+CMGD=%d)", device, index, index)
-	_, err = c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGD=%d", device, index), 5*time.Second)
+	// 等待设备处理模式切换
+	time.Sleep(500 * time.Millisecond)
+
+	// 步骤2：删除指定索引的短信（AT+CMGD=<index>,<delflag>）
+	// delflag=0 表示只删除指定索引的短信
+	log.Printf("[SMS] Deleting SMS from device %s at index %d (AT+CMGD=%d,0)", device, index, index)
+	_, err = c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGD=%d,0", device, index), 5*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to delete SMS (AT+CMGD=%d): %w", index, err)
+		return fmt.Errorf("failed to delete SMS (AT+CMGD=%d,0): %w", index, err)
 	}
 
 	return nil
@@ -403,14 +413,19 @@ func (c *Client) DeleteAllSMS(device string) error {
 	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
 	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to set SMS format (AT+CMGF=1): %w", err)
+		// 如果设置文本模式失败，可能设备已经是文本模式，继续尝试删除
+		log.Printf("[SMS] Warning: failed to set SMS format (AT+CMGF=1): %v", err)
 	}
 
-	// 步骤2：删除所有短信（AT+CMGD=4）
-	log.Printf("[SMS] Deleting ALL SMS from device %s (AT+CMGD=4)", device)
-	_, err = c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGD=4", device), 5*time.Second)
+	// 等待设备处理模式切换
+	time.Sleep(500 * time.Millisecond)
+
+	// 步骤2：删除所有短信（AT+CMGD=1,4）
+	// delflag=4 表示删除所有短信
+	log.Printf("[SMS] Deleting ALL SMS from device %s (AT+CMGD=1,4)", device)
+	_, err = c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGD=1,4", device), 10*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to delete all SMS (AT+CMGD=4): %w", err)
+		return fmt.Errorf("failed to delete all SMS (AT+CMGD=1,4): %w", err)
 	}
 
 	return nil
