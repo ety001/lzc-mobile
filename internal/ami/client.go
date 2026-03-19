@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,14 @@ type Client struct {
 	// SIP peer 注册跟踪
 	peerRegistrations map[string]bool // peer => registered (true) 状态
 	peerRegMu         sync.RWMutex
+
+	// 通道计数缓存
+	channelCount   int
+	channelCountMu sync.RWMutex
+
+	// 等待中的通道查询
+	pendingChannelQueries map[string]chan int // actionID -> result channel
+	pendingChannelMu      sync.RWMutex
 }
 
 // Status Asterisk 状态
@@ -89,13 +98,15 @@ func NewClient() (*Client, error) {
 	}
 
 	c := &Client{
-		conn:              conn,
-		client:            client,
-		status:            StatusUnknown,
-		errCh:             make(chan error, 10),
-		msgCh:             make(chan *goami2.Message, 100),
-		responseChs:       make(map[string]chan *goami2.Message),
-		peerRegistrations: make(map[string]bool),
+		conn:                  conn,
+		client:                client,
+		status:                StatusUnknown,
+		errCh:                 make(chan error, 10),
+		msgCh:                 make(chan *goami2.Message, 100),
+		responseChs:           make(map[string]chan *goami2.Message),
+		peerRegistrations:     make(map[string]bool),
+		channelCount:          0,
+		pendingChannelQueries: make(map[string]chan int),
 	}
 
 	// 启动消息监听
@@ -213,6 +224,24 @@ func (c *Client) handleMessage(msg *goami2.Message) {
 	case "PeerStatus":
 		// SIP peer 状态变更
 		c.handlePeerStatus(msg)
+	case "CoreShowChannelsComplete":
+		// 通道列表查询完成
+		c.handleCoreShowChannelsComplete(msg)
+	case "EndpointList":
+		// PJSIP endpoint 列表
+		c.handleEndpointList(msg)
+	case "ContactStatus":
+		// PJSIP contact 状态变更
+		c.handleContactStatus(msg)
+	case "InboundRegistrationDetail":
+		// PJSIP 入站注册详情
+		c.handleInboundRegistrationDetail(msg)
+	case "AorDetail":
+		// PJSIP AOR 详情（包含 contact 状态）
+		c.handleAorDetail(msg)
+	case "AorList":
+		// PJSIP AOR 列表（PJSIPShowAors 返回的事件）
+		c.handleAorList(msg)
 	}
 }
 
@@ -224,7 +253,36 @@ func (c *Client) subscribeEvents() error {
 	action.AddActionID()
 
 	c.client.Send(action.Byte())
+
+	// 查询初始 SIP peer 状态
+	go c.queryInitialPeerStatus()
+
 	return nil
+}
+
+// queryInitialPeerStatus 查询初始 SIP peer 状态
+func (c *Client) queryInitialPeerStatus() {
+	// 等待一小段时间确保连接稳定
+	time.Sleep(500 * time.Millisecond)
+
+	// 查询 PJSIP AORs（包含 contact 注册状态）
+	// 这会返回 AorDetail 事件，包含每个 AOR 的 contact 信息
+	action := goami2.NewAction("PJSIPShowAors")
+	action.AddActionID()
+	if err := c.SendAction(action); err != nil {
+		log.Printf("[AMI] Failed to query AORs: %v", err)
+	} else {
+		log.Println("[AMI] Sent PJSIPShowAors to query initial registration status")
+	}
+
+	// 查询 PJSIP endpoints（可选，用于获取设备状态）
+	endpointAction := goami2.NewAction("PJSIPShowEndpoints")
+	endpointAction.AddActionID()
+	if err := c.SendAction(endpointAction); err != nil {
+		log.Printf("[AMI] Failed to query endpoints: %v", err)
+	} else {
+		log.Println("[AMI] Sent PJSIPShowEndpoints to query initial peer status")
+	}
 }
 
 // SendAction 发送 AMI 动作
@@ -582,15 +640,42 @@ func (c *Client) GetStatusInfo() (*StatusInfo, error) {
 func (c *Client) getChannelCount() (int, error) {
 	action := goami2.NewAction("CoreShowChannels")
 	action.AddActionID()
+	actionID := action.Field("ActionID")
+
+	// 创建结果通道
+	resultCh := make(chan int, 1)
+	c.pendingChannelMu.Lock()
+	c.pendingChannelQueries[actionID] = resultCh
+	c.pendingChannelMu.Unlock()
+
+	// 确保清理
+	defer func() {
+		c.pendingChannelMu.Lock()
+		if _, exists := c.pendingChannelQueries[actionID]; exists {
+			delete(c.pendingChannelQueries, actionID)
+			close(resultCh)
+		}
+		c.pendingChannelMu.Unlock()
+	}()
 
 	if err := c.SendAction(action); err != nil {
 		return 0, err
 	}
 
-	// 简化实现：通过事件统计通道数
-	// 实际应该解析 CoreShowChannelsComplete 事件
-	// 这里先返回 0，后续可以通过事件监听来更新
-	return 0, nil
+	// 等待 CoreShowChannelsComplete 事件
+	select {
+	case count := <-resultCh:
+		return count, nil
+	case <-time.After(3 * time.Second):
+		// 超时，返回缓存的值
+		c.channelCountMu.RLock()
+		cachedCount := c.channelCount
+		c.channelCountMu.RUnlock()
+		if cachedCount > 0 {
+			return cachedCount, nil
+		}
+		return 0, fmt.Errorf("timeout waiting for CoreShowChannelsComplete")
+	}
 }
 
 // getRegistrationCount 获取 SIP 注册数
@@ -694,13 +779,31 @@ func (c *Client) Close() error {
 func (c *Client) handlePeerEntry(msg *goami2.Message) {
 	peerName := msg.Field("ObjectName")
 	if peerName == "" {
+		peerName = msg.Field("Peer")
+	}
+	if peerName == "" {
 		return
 	}
 
-	// PeerEntry 事件通常在 SIP peer 注册或注销时触发
-	// 我们需要检查实际的注册状态
-	// 由于 PeerEntry 本身不直接提供注册状态，我们依赖 PeerStatus 事件
-	log.Printf("[AMI] PeerEntry event for %s", peerName)
+	// 解析 Status 字段
+	// 常见值: "Registered", "Unregistered", "Unknown", "Rejected", "Lagged"
+	// 也可能是: "OK (XX ms)" 格式（表示已注册并有延迟）
+	peerStatus := msg.Field("Status")
+	registered := strings.HasPrefix(peerStatus, "Registered") ||
+		strings.HasPrefix(peerStatus, "OK")
+
+	c.peerRegMu.Lock()
+	oldStatus := c.peerRegistrations[peerName]
+	c.peerRegistrations[peerName] = registered
+	c.peerRegMu.Unlock()
+
+	if oldStatus != registered {
+		log.Printf("[AMI] Peer %s registration status changed: %v -> %v (Status: %s)",
+			peerName, oldStatus, registered, peerStatus)
+	} else {
+		log.Printf("[AMI] Peer %s registration status: %v (Status: %s)",
+			peerName, registered, peerStatus)
+	}
 }
 
 // handlePeerStatus 处理 PeerStatus 事件（SIP peer 状态变更）
@@ -736,4 +839,185 @@ func (c *Client) GetPeerRegistrationCount() int {
 		}
 	}
 	return count
+}
+
+// handleCoreShowChannelsComplete 处理 CoreShowChannelsComplete 事件
+func (c *Client) handleCoreShowChannelsComplete(msg *goami2.Message) {
+	actionID := msg.Field("ActionID")
+	listItemsStr := msg.Field("ListItems")
+	count, _ := strconv.Atoi(listItemsStr)
+
+	// 更新缓存
+	c.channelCountMu.Lock()
+	c.channelCount = count
+	c.channelCountMu.Unlock()
+
+	// 通知等待的查询
+	if actionID != "" {
+		c.pendingChannelMu.RLock()
+		ch, exists := c.pendingChannelQueries[actionID]
+		c.pendingChannelMu.RUnlock()
+
+		if exists {
+			select {
+			case ch <- count:
+			default:
+			}
+			c.pendingChannelMu.Lock()
+			delete(c.pendingChannelQueries, actionID)
+			close(ch)
+			c.pendingChannelMu.Unlock()
+		}
+	}
+	log.Printf("[AMI] Channel count: %d", count)
+}
+
+// handleEndpointList 处理 PJSIP EndpointList 事件
+func (c *Client) handleEndpointList(msg *goami2.Message) {
+	endpoint := msg.Field("ObjectName")
+	if endpoint == "" {
+		endpoint = msg.Field("Endpoint")
+	}
+	deviceState := msg.Field("DeviceState")
+	log.Printf("[AMI] EndpointList: %s, DeviceState: %s", endpoint, deviceState)
+	// 注意：DeviceState 不等于注册状态，注册状态由 ContactStatus 事件处理
+}
+
+// handleContactStatus 处理 PJSIP ContactStatus 事件
+func (c *Client) handleContactStatus(msg *goami2.Message) {
+	// 优先使用 Aor 字段
+	aor := msg.Field("Aor")
+	if aor == "" {
+		// 如果没有 Aor，尝试从 URI 提取
+		uri := msg.Field("URI")
+		if uri == "" {
+			return
+		}
+		parts := strings.SplitN(uri, "@", 2)
+		aor = parts[0]
+		aor = strings.TrimPrefix(aor, "sip:")
+		aor = strings.TrimPrefix(aor, "sips:")
+		if colonIdx := strings.Index(aor, ":"); colonIdx != -1 {
+			aor = aor[:colonIdx]
+		}
+	}
+	if aor == "" {
+		return
+	}
+
+	contactStatus := msg.Field("ContactStatus")
+	// ContactStatus 可能的值: "Reachable", "NonQualified", "Unavailable", "Unknown", "Removed"
+	// Reachable 表示已注册且可达
+	registered := contactStatus == "Reachable" || contactStatus == "Available"
+
+	c.peerRegMu.Lock()
+	oldStatus := c.peerRegistrations[aor]
+	c.peerRegistrations[aor] = registered
+	c.peerRegMu.Unlock()
+
+	if oldStatus != registered {
+		log.Printf("[AMI] Contact %s status changed: %v -> %v (ContactStatus: %s)",
+			aor, oldStatus, registered, contactStatus)
+	}
+}
+
+// handleInboundRegistrationDetail 处理 PJSIP 入站注册详情
+func (c *Client) handleInboundRegistrationDetail(msg *goami2.Message) {
+	endpoint := msg.Field("Endpoint")
+	if endpoint == "" {
+		return
+	}
+
+	status := msg.Field("Status")
+	registered := status == "Registered"
+
+	c.peerRegMu.Lock()
+	oldStatus := c.peerRegistrations[endpoint]
+	c.peerRegistrations[endpoint] = registered
+	c.peerRegMu.Unlock()
+
+	if oldStatus != registered {
+		log.Printf("[AMI] Inbound registration %s status changed: %v -> %v",
+			endpoint, oldStatus, registered)
+	}
+}
+
+// handleAorDetail 处理 PJSIP AorDetail 事件（包含 contact 注册状态）
+// PJSIPShowAors 命令返回的事件，格式示例：
+// Event: AorDetail
+// ObjectType: aor
+// ObjectName: 101
+// Contacts: 101/sip:101@192.168.199.11:41665;transport=TCP;d0ca57db3a;Avail;0.735
+func (c *Client) handleAorDetail(msg *goami2.Message) {
+	aorName := msg.Field("ObjectName")
+	if aorName == "" {
+		aorName = msg.Field("Aor")
+	}
+	if aorName == "" {
+		return
+	}
+
+	// Contacts 字段格式: endpoint/sip:endpoint@host:port;transport;hash;status;rtt
+	// 多个 contact 用逗号分隔
+	contacts := msg.Field("Contacts")
+	if contacts == "" {
+		// 没有 contact，表示未注册
+		c.peerRegMu.Lock()
+		c.peerRegistrations[aorName] = false
+		c.peerRegMu.Unlock()
+		log.Printf("[AMI] AOR %s has no contacts (unregistered)", aorName)
+		return
+	}
+
+	// 检查是否有 Available 的 contact
+	// Contact 状态可能是: Avail, Unavail, Unknown, NonQual
+	registered := strings.Contains(contacts, ";Avail;") ||
+		strings.Contains(contacts, "Avail")
+
+	c.peerRegMu.Lock()
+	oldStatus := c.peerRegistrations[aorName]
+	c.peerRegistrations[aorName] = registered
+	c.peerRegMu.Unlock()
+
+	log.Printf("[AMI] AOR %s registration: %v (contacts: %s)", aorName, registered, contacts)
+	if oldStatus != registered {
+		log.Printf("[AMI] AOR %s status changed: %v -> %v", aorName, oldStatus, registered)
+	}
+}
+
+// handleAorList 处理 PJSIP AorList 事件
+// PJSIPShowAors 命令返回的事件，格式与 AorDetail 类似
+func (c *Client) handleAorList(msg *goami2.Message) {
+	aorName := msg.Field("ObjectName")
+	if aorName == "" {
+		aorName = msg.Field("Aor")
+	}
+	if aorName == "" {
+		return
+	}
+
+	// Contacts 字段格式: endpoint/sip:endpoint@host:port;transport;hash;status;rtt
+	contacts := msg.Field("Contacts")
+	if contacts == "" {
+		// 没有 contact，表示未注册
+		c.peerRegMu.Lock()
+		c.peerRegistrations[aorName] = false
+		c.peerRegMu.Unlock()
+		log.Printf("[AMI] AorList: %s has no contacts (unregistered)", aorName)
+		return
+	}
+
+	// 检查是否有 Available 的 contact
+	registered := strings.Contains(contacts, ";Avail;") ||
+		strings.Contains(contacts, "Avail")
+
+	c.peerRegMu.Lock()
+	oldStatus := c.peerRegistrations[aorName]
+	c.peerRegistrations[aorName] = registered
+	c.peerRegMu.Unlock()
+
+	log.Printf("[AMI] AorList: %s registration: %v (contacts: %s)", aorName, registered, contacts)
+	if oldStatus != registered {
+		log.Printf("[AMI] AorList: %s status changed: %v -> %v", aorName, oldStatus, registered)
+	}
 }
