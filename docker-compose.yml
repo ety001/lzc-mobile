@@ -1,0 +1,41 @@
+services:
+  # 测试用 Mock OIDC 服务器
+  oidc-mock:
+    image: ety001/lzc-mock-oidc:latest
+    container_name: lzc-oidc-mock
+    restart: always
+    ports:
+      - "7654:8080"
+    environment:
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-test-client}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-test-client}
+
+  # LZC Mobile 主服务
+  lzc-mobile:
+    image: ety001/lzc-mobile:latest
+    container_name: lzc-mobile
+    restart: always
+    network_mode: host
+    privileged: true
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
+      - /dev/ttyUSB2:/dev/ttyUSB2
+      - /dev/ttyUSB3:/dev/ttyUSB3
+      - /dev/snd:/dev/snd
+    environment:
+      # OIDC 配置 (连接到 mock 服务)
+      # 由于使用 network_mode: host，通过 127.0.0.1 访问 oidc-mock
+      - LAZYCAT_AUTH_OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-test-client}
+      - LAZYCAT_AUTH_OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-test-client}
+      - LAZYCAT_AUTH_OIDC_AUTH_URI=http://127.0.0.1:7654/authorize
+      - LAZYCAT_AUTH_OIDC_TOKEN_URI=http://127.0.0.1:7654/token
+      - LAZYCAT_AUTH_OIDC_USERINFO_URI=http://127.0.0.1:7654/userinfo
+      # AMI 配置
+      - ASTERISK_AMI_USERNAME=${ASTERISK_AMI_USERNAME:-admin}
+      - ASTERISK_AMI_PASSWORD=${ASTERISK_AMI_PASSWORD:-123456}
+    volumes:
+      - ./data:/var/lib/lzc-mobile
+      - ./logs:/var/log/asterisk
+    depends_on:
+      - oidc-mock
