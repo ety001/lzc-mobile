@@ -59,7 +59,7 @@ qualify_frequency = 60
 remove_existing = yes
 
 ; Auth for {{.Username}}
-[{{.Username}}](auth-template)
+[{{.Username}}-auth](auth-template)
 type = auth
 username = {{.Username}}
 password = {{.Secret}}
@@ -67,7 +67,7 @@ password = {{.Secret}}
 ; Endpoint for {{.Username}} - 支持 TCP 和 UDP
 [{{.Username}}](endpoint-template)
 type = endpoint
-auth = {{.Username}}
+auth = {{.Username}}-auth
 aors = {{.Username}}
 {{if .CallerID}}callerid = {{.CallerID}}{{end}}
 {{if .Context}}context = {{.Context}}{{end}}

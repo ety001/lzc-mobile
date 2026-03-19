@@ -62,22 +62,18 @@ exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_
 exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - Base64: ${USSD_BASE64}' >> /var/log/asterisk/ussd.txt)
 exten => ussd,n,Hangup()
 
-; 处理来电：根据 QUECTELNAME 路由到绑定的 extension
+; 处理来电：根据 QUECTELNAME 路由到绑定的 extension（同时振铃）
 exten => s,1,NoOp(Incoming call from quectel ${QUECTELNAME})
 exten => s,n,GotoIf($["${QUECTELNAME}" = ""]?no-binding)
-{{range .DongleBindings}}
-{{if .Inbound}}
-exten => s,n,GotoIf($["${QUECTELNAME}" = "{{.DongleID}}"]?binding-{{.DongleID}})
-{{end}}
+{{range $dongleID, $extensions := .InboundBindingsByDongle}}
+exten => s,n,GotoIf($["${QUECTELNAME}" = "{{$dongleID}}"]?binding-{{$dongleID}})
 {{end}}
 exten => s,n(no-binding),NoOp(No extension binding found for quectel ${QUECTELNAME})
 exten => s,n,Hangup()
-{{range .DongleBindings}}
-{{if .Inbound}}
-exten => s,n(binding-{{.DongleID}}),NoOp(Routing quectel {{.DongleID}} to extension {{.Extension.Username}})
-exten => s,n,Dial(PJSIP/{{.Extension.Username}},30)
+{{range $dongleID, $extensions := .InboundBindingsByDongle}}
+exten => s,n(binding-{{$dongleID}}),NoOp(Routing quectel {{$dongleID}} - simultaneous ring to {{len $extensions}} extension(s))
+exten => s,n,Dial({{range $i, $ext := $extensions}}{{if $i}}&{{end}}PJSIP/{{$ext.Username}}{{end}},30)
 exten => s,n,Hangup()
-{{end}}
 {{end}}
 
 ; Quectel 设备上下文：处理来电、短信、USSD（别名，用于兼容）
@@ -96,22 +92,18 @@ exten => ussd,1,Verbose(Incoming USSD on ${QUECTELNAME}: ${BASE64_DECODE(${USSD_
 exten => ussd,n,System(echo '${STRFTIME(${EPOCH},,%Y-%m-%d %H:%M:%S)} - ${QUECTELNAME} - Base64: ${USSD_BASE64}' >> /var/log/asterisk/ussd.txt)
 exten => ussd,n,Hangup()
 
-; 处理来电：根据 QUECTELNAME 路由到绑定的 extension
+; 处理来电：根据 QUECTELNAME 路由到绑定的 extension（同时振铃）
 exten => s,1,NoOp(Incoming call from quectel ${QUECTELNAME})
 exten => s,n,GotoIf($["${QUECTELNAME}" = ""]?no-binding)
-{{range .DongleBindings}}
-{{if .Inbound}}
-exten => s,n,GotoIf($["${QUECTELNAME}" = "{{.DongleID}}"]?binding-{{.DongleID}})
-{{end}}
+{{range $dongleID, $extensions := .InboundBindingsByDongle}}
+exten => s,n,GotoIf($["${QUECTELNAME}" = "{{$dongleID}}"]?binding-{{$dongleID}})
 {{end}}
 exten => s,n(no-binding),NoOp(No extension binding found for quectel ${QUECTELNAME})
 exten => s,n,Hangup()
-{{range .DongleBindings}}
-{{if .Inbound}}
-exten => s,n(binding-{{.DongleID}}),NoOp(Routing quectel {{.DongleID}} to extension {{.Extension.Username}})
-exten => s,n,Dial(PJSIP/{{.Extension.Username}},30)
+{{range $dongleID, $extensions := .InboundBindingsByDongle}}
+exten => s,n(binding-{{$dongleID}}),NoOp(Routing quectel {{$dongleID}} - simultaneous ring to {{len $extensions}} extension(s))
+exten => s,n,Dial({{range $i, $ext := $extensions}}{{if $i}}&{{end}}PJSIP/{{$ext.Username}}{{end}},30)
 exten => s,n,Hangup()
-{{end}}
 {{end}}
 
 ; 去电路由：从 extension 到 quectel

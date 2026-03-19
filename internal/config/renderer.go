@@ -12,15 +12,16 @@ import (
 
 // ConfigData 配置模板数据
 type ConfigData struct {
-	SIPHost        string
-	SIPPort        int
-	RTPStartPort   int
-	RTPEndPort     int
-	AMIUsername    string
-	AMIPassword    string
-	Extensions     []ExtensionData
-	DongleBindings []DongleBindingData
-	Dongles        []DongleData
+	SIPHost               string
+	SIPPort               int
+	RTPStartPort          int
+	RTPEndPort            int
+	AMIUsername           string
+	AMIPassword           string
+	Extensions            []ExtensionData
+	DongleBindings        []DongleBindingData
+	Dongles               []DongleData
+	InboundBindingsByDongle map[string][]ExtensionData // 按 dongle ID 分组的 inbound 绑定
 }
 
 // ExtensionData Extension 模板数据
@@ -152,6 +153,17 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 			Context:    dongle.Context,
 			DialPrefix: dongle.DialPrefix,
 			Disable:    dongle.Disable,
+		}
+	}
+
+	// 按 dongle ID 分组 inbound 绑定
+	data.InboundBindingsByDongle = make(map[string][]ExtensionData)
+	for _, binding := range data.DongleBindings {
+		if binding.Inbound {
+			data.InboundBindingsByDongle[binding.DongleID] = append(
+				data.InboundBindingsByDongle[binding.DongleID],
+				binding.Extension,
+			)
 		}
 	}
 

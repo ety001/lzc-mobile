@@ -242,18 +242,20 @@ func (c *Client) SendAction(action *goami2.Message) error {
 
 // Reload 重新加载 Asterisk 配置
 func (c *Client) Reload() error {
-	// 先执行 CoreReload 重新加载所有配置
-	action := goami2.NewAction("CoreReload")
+	// 使用 Command action 发送 core reload 命令
+	// CoreReload action 在某些 Asterisk 版本中不被支持，会导致连接断开
+	action := goami2.NewAction("Command")
+	action.SetField("Command", "core reload")
 	action.AddActionID()
 	if err := c.SendAction(action); err != nil {
 		return err
 	}
 
-	// 然后显式 reload SIP 配置，确保 SIP 用户配置被重新加载
-	sipAction := goami2.NewAction("Command")
-	sipAction.SetField("Command", "sip reload")
-	sipAction.AddActionID()
-	return c.SendAction(sipAction)
+	// 显式 reload PJSIP 配置，确保 SIP 用户配置被重新加载
+	pjsipAction := goami2.NewAction("Command")
+	pjsipAction.SetField("Command", "pjsip reload")
+	pjsipAction.AddActionID()
+	return c.SendAction(pjsipAction)
 }
 
 // Restart 重启 Asterisk
