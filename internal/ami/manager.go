@@ -14,9 +14,10 @@ import (
 
 // Manager AMI 管理器（单例）
 type Manager struct {
-	client      *Client
-	subscribers []StatusSubscriber
-	mu          sync.RWMutex
+	client         *Client
+	subscribers    []StatusSubscriber
+	statusFailCount int // 状态查询连续失败次数，用于检测 AMI 连接断开
+	mu             sync.RWMutex
 }
 
 // StatusSubscriber 状态订阅者接口
@@ -207,16 +208,20 @@ func (m *Manager) notifySMSWithIndex(device, number, message, timestamp string, 
 
 // DeleteSMS 删除 SIM 卡中的短信
 func (m *Manager) DeleteSMS(device string, index int) error {
-	if m.client == nil {
-		return fmt.Errorf("AMI client not connected")
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if err := m.checkClientHealth(); err != nil {
+		return err
 	}
 	return m.client.DeleteSMS(device, index)
 }
 
 // DeleteAllSMS 删除 SIM 卡中的所有短信
 func (m *Manager) DeleteAllSMS(device string) error {
-	if m.client == nil {
-		return fmt.Errorf("AMI client not connected")
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if err := m.checkClientHealth(); err != nil {
+		return err
 	}
 	return m.client.DeleteAllSMS(device)
 }
@@ -287,9 +292,31 @@ func (m *Manager) updateStatus() {
 
 	info, err := client.GetStatusInfo()
 	if err != nil {
-		log.Printf("Failed to get status info: %v", err)
+		m.mu.Lock()
+		m.statusFailCount++
+		failCount := m.statusFailCount
+		m.mu.Unlock()
+		log.Printf("Failed to get status info: %v (consecutive failures: %d)", err, failCount)
+
+		// 连续失败超过 3 次，判定 AMI 连接已断开，触发重连
+		if failCount >= 3 {
+			log.Println("AMI connection health check failed 3 times in a row, forcing reconnect...")
+			if rerr := m.reconnect(); rerr != nil {
+				log.Printf("AMI reconnect failed: %v", rerr)
+			} else {
+				m.mu.Lock()
+				m.statusFailCount = 0
+				m.mu.Unlock()
+				log.Println("AMI reconnected successfully after health check failure")
+			}
+		}
 		return
 	}
+
+	// 成功获取状态，重置失败计数
+	m.mu.Lock()
+	m.statusFailCount = 0
+	m.mu.Unlock()
 
 	for _, sub := range subscribers {
 		sub.OnStatusUpdate(info)
@@ -322,12 +349,23 @@ func (m *Manager) GetClient() *Client {
 	return m.client
 }
 
+// checkClientHealth 检查 AMI 客户端是否健康（连接正常且近期通信成功）
+func (m *Manager) checkClientHealth() error {
+	if m.client == nil {
+		return ErrNotConnected
+	}
+	if m.statusFailCount > 0 {
+		return fmt.Errorf("AMI client unhealthy (consecutive status failures: %d), attempting reconnect", m.statusFailCount)
+	}
+	return nil
+}
+
 // Reload 重新加载配置
 func (m *Manager) Reload() error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.client == nil {
-		return ErrNotConnected
+	if err := m.checkClientHealth(); err != nil {
+		return err
 	}
 	return m.client.Reload()
 }
@@ -336,8 +374,8 @@ func (m *Manager) Reload() error {
 func (m *Manager) Restart() error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.client == nil {
-		return ErrNotConnected
+	if err := m.checkClientHealth(); err != nil {
+		return err
 	}
 	return m.client.Restart()
 }
@@ -346,8 +384,8 @@ func (m *Manager) Restart() error {
 func (m *Manager) SendSMS(device, number, message string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.client == nil {
-		return ErrNotConnected
+	if err := m.checkClientHealth(); err != nil {
+		return err
 	}
 	return m.client.SendSMS(device, number, message)
 }

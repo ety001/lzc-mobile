@@ -196,5 +196,59 @@ if [ ! -f /etc/asterisk/asterisk.conf ]; then
     # 或者让 Go 程序首次运行时生成
 fi
 
+# ============================================================================
+# 串口占用守护进程
+# 自动检测并清理异常占用 /dev/ttyUSB* 的进程，防止 chan_quectel 模块失效
+# ============================================================================
+(
+    # 关闭严格模式，防止单条命令失败导致整个守护退出
+    set +e
+
+    # 给 Asterisk 和 chan_quectel 足够初始化时间
+    sleep 30
+
+    while true; do
+        sleep 60
+
+        # 如果 lsof 不可用，直接跳过本次检查
+        if ! command -v lsof >/dev/null 2>&1; then
+            echo "[PORT-GUARD] lsof not available, skipping check"
+            continue
+        fi
+
+        for port in /dev/ttyUSB*; do
+            [ -e "$port" ] || continue
+
+            # 获取占用该端口的进程（排除 asterisk 和 webpanel）
+            # lsof 输出格式: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+            bad_pids=$(lsof "$port" 2>/dev/null | awk 'NR>1 {print $2}' | grep -vxE 'asterisk|webpanel' | sort -u | tr '\n' ' ' | sed 's/ *$//')
+
+            if [ -n "$bad_pids" ]; then
+                echo "[PORT-GUARD] Detected abnormal processes holding $port: $bad_pids"
+
+                # 先尝试优雅终止（SIGTERM）
+                kill $bad_pids 2>/dev/null
+                sleep 2
+
+                # 检查是否还有残留，强制终止（SIGKILL）
+                remaining=$(lsof "$port" 2>/dev/null | awk 'NR>1 {print $2}' | grep -vxE 'asterisk|webpanel' | sort -u | tr '\n' ' ' | sed 's/ *$//')
+                if [ -n "$remaining" ]; then
+                    echo "[PORT-GUARD] Force killing remaining processes: $remaining"
+                    kill -9 $remaining 2>/dev/null
+                    sleep 2
+                fi
+
+                # 触发 chan_quectel 重新加载以恢复串口连接
+                asterisk -rx 'module reload chan_quectel.so' 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    echo "[PORT-GUARD] Reloaded chan_quectel successfully"
+                else
+                    echo "[PORT-GUARD] Failed to reload chan_quectel (may not be ready yet)"
+                fi
+            fi
+        done
+    done
+) &
+
 # 启动 Supervisor（会管理 Asterisk 和 Web 面板）
 exec /usr/bin/supervisord -c /etc/supervisord.conf

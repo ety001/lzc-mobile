@@ -202,6 +202,8 @@ Dongle 管理用于配置 USB dongle（GSM Modem）与 Extension 的绑定关系
 2. 检查 Dongle ID 是否正确
 3. 查看 Asterisk 日志了解详细错误信息
 4. 确认 dongle 设备已正确配置在 `dongle.conf` 中
+5. **检查 `/dev/ttyUSB*` 是否被其他进程占用**：执行 `lsof /dev/ttyUSB*` 查看是否有 `cat` 等进程长期占用串口。如有，终止该进程后执行 `asterisk -rx 'module reload chan_quectel.so'`
+6. **检查 AMI 连接状态**：执行 `asterisk -rx 'manager show connected'`，如果显示 0 users，说明 webpanel 与 Asterisk 的 AMI 连接已断开，需重启 webpanel（`supervisorctl restart webpanel`）
 
 ### 通知未收到
 

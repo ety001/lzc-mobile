@@ -193,6 +193,29 @@
 - 测试手机（用于测试短信和通话）
 - 通知渠道测试账号（SMTP、Slack、Telegram 等）
 
+## 调试注意事项
+
+### USB 串口调试
+
+如需直接进入容器调试 dongle 的 AT 命令，**切勿使用裸 `cat /dev/ttyUSB*`**，因为 `cat` 会长期阻塞占用串口，导致 Asterisk 的 `chan_quectel` 模块无法打开设备，表现为短信收发均失败。
+
+正确做法：始终加 `timeout`，例如：
+```bash
+# 错误：会永久占用串口，导致模块断线
+cat /dev/ttyUSB2
+
+# 正确：限时读取，用完后立即释放
+timeout 3 cat /dev/ttyUSB2
+timeout 5 sh -c "echo -e 'AT\r' > /dev/ttyUSB2 && sleep 1 && head -c 50 < /dev/ttyUSB2"
+```
+
+如果不慎产生残留的 `cat` 进程，需手动终止并 reload 模块：
+```bash
+# 在容器内查找并杀掉占用进程
+kill $(lsof /dev/ttyUSB2 2>/dev/null | awk '/cat|busybox/{print $2}')
+asterisk -rx 'module reload chan_quectel.so'
+```
+
 ## 测试报告模板
 
 测试完成后，应记录：

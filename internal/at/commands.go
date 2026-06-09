@@ -11,6 +11,11 @@ import (
 )
 
 // CommandExecutor AT 命令执行器
+//
+// 警告：切勿在容器内直接使用裸 `cat /dev/ttyUSB*` 读取串口，
+// 因为 cat 会永久阻塞占用串口，导致 Asterisk 的 chan_quectel 模块
+// 无法打开设备，进而造成短信/通话全部失败。
+// 如需调试，请始终使用 `timeout` 命令限时读取。
 type CommandExecutor struct {
 	devicePort string // 例如: /dev/ttyUSB2
 }
