@@ -121,5 +121,5 @@ exten => {{.Extension.Username}},n,Hangup()
 [quectel-sms]
 exten => _[+0-9].,1,NoOp(Sending SMS via quectel: device=${QUECTEL_DEVICE}, number=${EXTEN}, message=${SMS_MESSAGE})
 exten => _[+0-9].,n,NoOp(All variables: QUECTEL_DEVICE=${QUECTEL_DEVICE}, SMS_MESSAGE=${SMS_MESSAGE}, __QUECTEL_DEVICE=${__QUECTEL_DEVICE}, __SMS_MESSAGE=${__SMS_MESSAGE})
-exten => _[+0-9].,n,QuectelSendSMS(${QUECTEL_DEVICE},${EXTEN},${SMS_MESSAGE},1440,yes,"")
+exten => _[+0-9].,n,QuectelSendSMS(${QUECTEL_DEVICE},${EXTEN},${SMS_MESSAGE},1440,yes,"web")
 exten => _[+0-9].,n,Hangup()

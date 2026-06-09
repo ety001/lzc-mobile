@@ -335,27 +335,22 @@ func (c *Client) Restart() error {
 
 // SendSMS 通过 quectel 发送短信
 func (c *Client) SendSMS(device, number, message string) error {
-	// Quectel 发送短信：使用 Originate 动作调用 dialplan
-	// dialplan 中会调用 QuectelSendSMS(device,number,message,validity,report,magicID)
-	action := goami2.NewAction("Originate")
-	// 使用标准的 Local channel 格式
-	channel := fmt.Sprintf("Local/%s@quectel-sms", number)
-	action.SetField("Channel", channel)
-	action.SetField("Context", "quectel-sms")
-	action.SetField("Exten", number)
-	action.SetField("Priority", "1")
-	action.SetField("Async", "true")
-	// 添加多个 Variable 字段
-	// __ 前缀会导出到目标 channel
-	// 第一个变量用 SetField，第二个用 AddField
-	action.SetField("Variable", fmt.Sprintf("__QUECTEL_DEVICE=%s", device))
-	action.AddField("Variable", fmt.Sprintf("__SMS_MESSAGE=%s", message))
-	action.AddActionID()
+	// 使用 AMI Command 动作直接执行 quectel sms CLI 命令
+	// 绕过 dialplan，避免 QuectelSendSMS 应用的 payload 空值检查问题
+	cmd := fmt.Sprintf("quectel sms %s %s %s", device, number, message)
+	msg, err := c.sendCommand(cmd, 15*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to send SMS command: %w", err)
+	}
 
-	log.Printf("[SMS] Sending SMS via AMI: device=%s, number=%s, message=%q", device, number, message)
-	log.Printf("[SMS] AMI Channel: %s", channel)
+	// 检查命令输出中是否包含错误信息
+	output := msg.Field("Output")
+	if output != "" && !strings.Contains(output, "SMS queued for send") {
+		return fmt.Errorf("SMS send failed: %s", output)
+	}
 
-	return c.SendAction(action)
+	log.Printf("[SMS] Sent via CLI: device=%s, number=%s, message=%q, output=%s", device, number, message, output)
+	return nil
 }
 
 // sendCommand 发送 AMI Command 并等待响应
