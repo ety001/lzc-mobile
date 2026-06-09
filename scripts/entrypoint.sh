@@ -221,7 +221,8 @@ fi
 
             # 获取占用该端口的进程（排除 asterisk 和 webpanel）
             # lsof 输出格式: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
-            bad_pids=$(lsof "$port" 2>/dev/null | awk 'NR>1 {print $2}' | grep -vxE 'asterisk|webpanel' | sort -u | tr '\n' ' ' | sed 's/ *$//')
+            # ⚠️ 必须在 awk 中按 COMMAND 列过滤，不能只提取 PID 再用 grep 匹配进程名
+            bad_pids=$(lsof "$port" 2>/dev/null | awk 'NR>1 {cmd=$1; pid=$2; if (cmd != "asterisk" && cmd != "webpanel") print pid}' | sort -u | tr '\n' ' ' | sed 's/ *$//')
 
             if [ -n "$bad_pids" ]; then
                 echo "[PORT-GUARD] Detected abnormal processes holding $port: $bad_pids"
@@ -231,7 +232,7 @@ fi
                 sleep 2
 
                 # 检查是否还有残留，强制终止（SIGKILL）
-                remaining=$(lsof "$port" 2>/dev/null | awk 'NR>1 {print $2}' | grep -vxE 'asterisk|webpanel' | sort -u | tr '\n' ' ' | sed 's/ *$//')
+                remaining=$(lsof "$port" 2>/dev/null | awk 'NR>1 {cmd=$1; pid=$2; if (cmd != "asterisk" && cmd != "webpanel") print pid}' | sort -u | tr '\n' ' ' | sed 's/ *$//')
                 if [ -n "$remaining" ]; then
                     echo "[PORT-GUARD] Force killing remaining processes: $remaining"
                     kill -9 $remaining 2>/dev/null
