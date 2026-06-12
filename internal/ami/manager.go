@@ -541,7 +541,7 @@ func (m *Manager) dongleHealthLoop() {
 
 			// 连续失败达到阈值，发送一次通知
 			if failCount >= maxReloadRetries && !notified && alertFn != nil {
-				alertMsg := fmt.Sprintf("[DongleHealth] ALERT: Device %s failed after %d reload attempts (state=%s). Manual intervention required.",
+				alertMsg := fmt.Sprintf("[DongleHealth] ALERT: Device %s failed after %d reload attempts (state=%s). 需要物理操作：到懒猫微服旁边拔插一下 USB dongle，或者重启懒猫微服硬件。",
 					dev.ID, failCount, dev.State)
 				log.Println(alertMsg)
 				alertFn(dev.ID, alertMsg)
