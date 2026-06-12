@@ -35,6 +35,7 @@ func (r *Router) updateGlobalConfig(c *gin.Context) {
 
 	// 更新配置
 	config.HTTPProxy = req.HTTPProxy
+	config.DongleHealthEnabled = req.DongleHealthEnabled
 	if err := database.DB.Save(&config).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ety001/lzc-mobile/internal/database"
 	"github.com/staskobzar/goami2"
 )
 
@@ -460,6 +461,22 @@ func (m *Manager) dongleHealthLoop() {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		// 检查全局开关
+		var gc database.GlobalConfig
+		if err := database.DB.FirstOrCreate(&gc, database.GlobalConfig{ID: 1}).Error; err == nil {
+			if !gc.DongleHealthEnabled {
+				// 开关关闭时，如果之前有告警状态，重置之
+				m.mu.Lock()
+				if m.dongleFailCount > 0 || m.dongleNotified {
+					log.Println("[DongleHealth] Health check disabled, resetting alert state")
+					m.dongleFailCount = 0
+					m.dongleNotified = false
+				}
+				m.mu.Unlock()
+				continue
+			}
+		}
+
 		m.mu.RLock()
 		client := m.client
 		alertFn := m.dongleAlertFn

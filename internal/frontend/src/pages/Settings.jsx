@@ -29,6 +29,7 @@ export default function Settings() {
   const [globalLoading, setGlobalLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [httpProxy, setHttpProxy] = useState("");
+  const [dongleHealthEnabled, setDongleHealthEnabled] = useState(true);
 
   // 通知配置状态
   const [notificationsLoading, setNotificationsLoading] = useState(true);
@@ -64,6 +65,7 @@ export default function Settings() {
     try {
       const response = await settingsAPI.get();
       setHttpProxy(response.data.http_proxy || "");
+      setDongleHealthEnabled(response.data.dongle_health_enabled !== false);
     } catch (error) {
       toast.error("获取配置失败");
     } finally {
@@ -75,7 +77,7 @@ export default function Settings() {
     e.preventDefault();
     setSaving(true);
     try {
-      await settingsAPI.update({ http_proxy: httpProxy });
+      await settingsAPI.update({ http_proxy: httpProxy, dongle_health_enabled: dongleHealthEnabled });
       toast.success("配置保存成功");
     } catch (error) {
       toast.error("保存失败", { description: error.response?.data?.error || error.message });
@@ -177,42 +179,58 @@ export default function Settings() {
               <Skeleton className="h-64" />
             </div>
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings2 className="h-5 w-5" />
-                  HTTP 代理服务器
-                </CardTitle>
-                <CardDescription>配置全局 HTTP 代理服务器，用于通知渠道的代理连接</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleGlobalSubmit} className="space-y-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="http_proxy">代理服务器地址</Label>
-                    <Input
-                      id="http_proxy"
-                      type="url"
-                      value={httpProxy}
-                      onChange={(e) => setHttpProxy(e.target.value)}
-                      placeholder="http://proxy.example.com:8080 或 https://proxy.example.com:8080"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      格式：http://host:port 或 https://host:port。留空表示不使用代理。
-                    </p>
-                  </div>
-                  <Button type="submit" disabled={saving}>
-                    {saving ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        保存中...
-                      </>
-                    ) : (
-                      "保存"
-                    )}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings2 className="h-5 w-5" />
+                    HTTP 代理服务器
+                  </CardTitle>
+                  <CardDescription>配置全局 HTTP 代理服务器，用于通知渠道的代理连接</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleGlobalSubmit} className="space-y-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="http_proxy">代理服务器地址</Label>
+                      <Input
+                        id="http_proxy"
+                        type="url"
+                        value={httpProxy}
+                        onChange={(e) => setHttpProxy(e.target.value)}
+                        placeholder="http://proxy.example.com:8080 或 https://proxy.example.com:8080"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        格式：http://host:port 或 https://host:port。留空表示不使用代理。
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/50">
+                      <div className="space-y-0.5">
+                        <div className="font-medium">Dongle 设备健康检查</div>
+                        <div className="text-sm text-muted-foreground">
+                          定期检查 Dongle 设备状态，异常时自动重载模块并发送通知
+                        </div>
+                      </div>
+                      <Switch
+                        checked={dongleHealthEnabled}
+                        onCheckedChange={(checked) => setDongleHealthEnabled(checked)}
+                      />
+                    </div>
+
+                    <Button type="submit" disabled={saving}>
+                      {saving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        "保存"
+                      )}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
 
