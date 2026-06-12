@@ -12,12 +12,20 @@ import (
 	"github.com/staskobzar/goami2"
 )
 
+// DongleAlertFunc 当 dongle 设备异常时调用的通知回调
+type DongleAlertFunc func(deviceID, message string)
+
 // Manager AMI 管理器（单例）
 type Manager struct {
-	client         *Client
-	subscribers    []StatusSubscriber
+	client          *Client
+	subscribers     []StatusSubscriber
 	statusFailCount int // 状态查询连续失败次数，用于检测 AMI 连接断开
-	mu             sync.RWMutex
+	mu              sync.RWMutex
+
+	// dongle 设备健康检查相关
+	dongleAlertFn    DongleAlertFunc // 故障通知回调
+	dongleFailCount  int             // dongle 连续检测失败次数
+	dongleNotified   bool            // 是否已发送故障通知（故障解除后重置）
 }
 
 // StatusSubscriber 状态订阅者接口
@@ -75,6 +83,9 @@ func (m *Manager) Init() error {
 
 	// 启动状态更新循环
 	go m.statusUpdateLoop()
+
+	// 启动 dongle 设备健康检查循环
+	go m.dongleHealthLoop()
 
 	return nil
 }
@@ -390,6 +401,13 @@ func (m *Manager) SendSMS(device, number, message string) error {
 	return m.client.SendSMS(device, number, message)
 }
 
+// SetDongleAlertFn 设置 dongle 设备故障通知回调
+func (m *Manager) SetDongleAlertFn(fn DongleAlertFunc) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.dongleAlertFn = fn
+}
+
 // reconnect 重新连接 AMI
 func (m *Manager) reconnect() error {
 	m.mu.Lock()
@@ -426,6 +444,132 @@ func (m *Manager) reconnect() error {
 	m.client = client
 	log.Println("AMI reconnected successfully")
 	return nil
+}
+
+// dongleHealthLoop 定期检查 dongle 设备健康状态
+// 检测到设备离线时尝试 module reload chan_quectel.so 恢复
+// 连续恢复失败后发送一次通知，故障解除后重置通知状态
+func (m *Manager) dongleHealthLoop() {
+	const (
+		checkInterval    = 30 * time.Second // 每 30 秒检查一次
+		maxReloadRetries = 3                // 连续 reload 失败多少次后发通知
+		reloadCooldown   = 60 * time.Second // 每次 reload 后等待时间
+	)
+
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		m.mu.RLock()
+		client := m.client
+		alertFn := m.dongleAlertFn
+		m.mu.RUnlock()
+
+		if client == nil {
+			continue
+		}
+
+		// 查询所有 dongle 设备列表
+		msg, err := client.SendCommand("quectel show devices", 5*time.Second)
+		if err != nil {
+			log.Printf("[DongleHealth] Failed to query devices: %v", err)
+			continue
+		}
+
+		output := msg.Field("data")
+		if output == "" {
+			continue
+		}
+
+		// 解析输出，检查每个设备的 State 列
+		// 输出格式（表头 + 数据行，字段按空格/多空格分隔）：
+		// ID           Group State      RSSI ...
+		// quectel0     0     Free       31  ...
+		devices := parseQuectelDevices(output)
+
+		for _, dev := range devices {
+			if dev.State == "Free" || dev.State == "In use" {
+				// 设备正常，重置失败计数和通知状态
+				m.mu.Lock()
+				if m.dongleFailCount > 0 || m.dongleNotified {
+					log.Printf("[DongleHealth] Device %s recovered (state=%s), resetting alert state", dev.ID, dev.State)
+					m.dongleFailCount = 0
+					m.dongleNotified = false
+				}
+				m.mu.Unlock()
+				continue
+			}
+
+			// 设备异常（Not connected / Not initialized 等）
+			m.mu.Lock()
+			m.dongleFailCount++
+			failCount := m.dongleFailCount
+			notified := m.dongleNotified
+			m.mu.Unlock()
+
+			log.Printf("[DongleHealth] Device %s unhealthy (state=%s), consecutive failures: %d", dev.ID, dev.State, failCount)
+
+			log.Printf("[DongleHealth] Device %s unhealthy (state=%s), attempting module reload chan_quectel.so (attempt %d/%d)",
+				dev.ID, dev.State, failCount, maxReloadRetries)
+
+			_, rerr := client.SendCommand("module reload chan_quectel.so", 10*time.Second)
+			if rerr != nil {
+				log.Printf("[DongleHealth] module reload failed: %v", rerr)
+			} else {
+				log.Printf("[DongleHealth] module reload chan_quectel.so executed")
+			}
+
+			// reload 后等待设备重新初始化
+			time.Sleep(reloadCooldown)
+
+			// 连续失败达到阈值，发送一次通知
+			if failCount >= maxReloadRetries && !notified && alertFn != nil {
+				alertMsg := fmt.Sprintf("[DongleHealth] ALERT: Device %s failed after %d reload attempts (state=%s). Manual intervention required.",
+					dev.ID, failCount, dev.State)
+				log.Println(alertMsg)
+				alertFn(dev.ID, alertMsg)
+
+				m.mu.Lock()
+				m.dongleNotified = true
+				m.mu.Unlock()
+			}
+		}
+	}
+}
+
+// quectelDeviceInfo 解析出的 dongle 设备信息
+type quectelDeviceInfo struct {
+	ID    string
+	State string
+}
+
+// parseQuectelDevices 解析 "quectel show devices" 的输出
+// 跳过表头行，解析设备 ID 和 State 字段
+func parseQuectelDevices(output string) []quectelDeviceInfo {
+	var devices []quectelDeviceInfo
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		// 跳过表头行（ID 开头的表头）
+		if fields[0] == "ID" {
+			continue
+		}
+		// fields[0]=ID, fields[1]=Group, fields[2]=State(可能截断)
+		// State 列可能是 "Free", "Not", "In" 等
+		state := fields[2]
+		// "Not" 可能是 "Not connected" 或 "Not initialized" 被截断
+		if state == "Not" && len(fields) > 3 {
+			state = state + " " + fields[3]
+		}
+		devices = append(devices, quectelDeviceInfo{
+			ID:    fields[0],
+			State: state,
+		})
+	}
+	return devices
 }
 
 // Close 关闭 AMI 管理器

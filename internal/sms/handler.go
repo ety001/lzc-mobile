@@ -280,3 +280,13 @@ func (h *Handler) ReloadConfigs() {
 		log.Println("Notification configs reloaded")
 	}
 }
+
+// SendAlert 通过已配置的通知渠道发送告警消息（供 dongle 健康检查等模块调用）
+func (h *Handler) SendAlert(source, message string) {
+	alertMessage := fmt.Sprintf("[LZC Mobile Alert] %s: %s", source, message)
+	log.Printf("Sending alert: %s", alertMessage)
+
+	if errs := h.notifyManager.Send(alertMessage); len(errs) > 0 {
+		log.Printf("Some alert notifications failed: %v", errs)
+	}
+}

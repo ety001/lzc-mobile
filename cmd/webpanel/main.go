@@ -69,6 +69,11 @@ func main() {
 				// 注册 SMS handler，通过 AMI 事件接收的 SMS 也会保存到数据库
 				smsHandler := sms.NewHandler()
 				smsHandler.Register()
+
+				// 设置 dongle 设备健康检查的通知回调
+				amiManager.SetDongleAlertFn(func(deviceID, message string) {
+					smsHandler.SendAlert(deviceID, message)
+				})
 				return
 			}
 			if i < maxRetries-1 {

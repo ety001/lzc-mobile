@@ -397,11 +397,22 @@ func (c *Client) sendCommand(command string, timeout time.Duration) (*goami2.Mes
 	}
 }
 
+// SendCommand 发送 AMI Command 并等待响应（导出方法，供 Manager 等外部调用）
+func (c *Client) SendCommand(command string, timeout time.Duration) (*goami2.Message, error) {
+	return c.sendCommand(command, timeout)
+}
+
 // ListSMS 查询 SIM 卡中的所有短信
 // device: Dongle 设备名称（如 quectel0）
 // 返回短信列表（索引和内容）
 // 注意：需要先执行 AT+CMGF=1 设置文本模式，再执行 AT+CMGL="ALL" 获取所有短信
 func (c *Client) ListSMS(device string) ([]SMSInfo, error) {
+	// 确保 chan_quectel 发送短信时处于 PDU 模式，退出时恢复
+	defer func() {
+		log.Printf("[SMS] Restoring SMS format to PDU mode (AT+CMGF=0) for device %s", device)
+		c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=0", device), 5*time.Second)
+	}()
+
 	// 步骤1：设置短信格式为文本模式（AT+CMGF=1）
 	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
 	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
@@ -438,6 +449,12 @@ func (c *Client) ListSMS(device string) ([]SMSInfo, error) {
 // 使用 AT+CMGD 命令删除短信
 // 注意：需要先执行 AT+CMGF=1 设置文本模式
 func (c *Client) DeleteSMS(device string, index int) error {
+	// 确保 chan_quectel 发送短信时处于 PDU 模式，退出时恢复
+	defer func() {
+		log.Printf("[SMS] Restoring SMS format to PDU mode (AT+CMGF=0) for device %s", device)
+		c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=0", device), 5*time.Second)
+	}()
+
 	// 步骤1：设置短信格式为文本模式（AT+CMGF=1）
 	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
 	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
@@ -464,6 +481,12 @@ func (c *Client) DeleteSMS(device string, index int) error {
 // device: Dongle 设备名称（如 quectel0）
 // 注意：需要先执行 AT+CMGF=1 设置文本模式
 func (c *Client) DeleteAllSMS(device string) error {
+	// 确保 chan_quectel 发送短信时处于 PDU 模式，退出时恢复
+	defer func() {
+		log.Printf("[SMS] Restoring SMS format to PDU mode (AT+CMGF=0) for device %s", device)
+		c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=0", device), 5*time.Second)
+	}()
+
 	// 步骤1：设置短信格式为文本模式（AT+CMGF=1）
 	log.Printf("[SMS] Setting SMS format to text mode (AT+CMGF=1) for device %s", device)
 	_, err := c.sendCommand(fmt.Sprintf("quectel cmd %s AT+CMGF=1", device), 5*time.Second)
