@@ -71,6 +71,7 @@ type GlobalConfig struct {
 	ID                    uint      `gorm:"primaryKey" json:"id"`
 	HTTPProxy             string    `gorm:"type:varchar(500)" json:"http_proxy"`                         // HTTP 代理服务器地址（格式：http://host:port 或 https://host:port）
 	DongleHealthEnabled   bool      `gorm:"default:true" json:"dongle_health_enabled"`                   // Dongle 设备健康检查开关（默认开启）
+	SoftphoneExtensionID  *uint     `json:"softphone_extension_id"`                                      // Web Softphone 使用的分机；nil/0=未配置则 Softphone 不可用
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
