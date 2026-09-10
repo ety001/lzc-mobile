@@ -102,6 +102,35 @@ export class SoftphoneSDK {
     this.#sendJSON({ type: "ping" });
   }
 
+  /**
+   * Inject a short uplink sine tone (no mic needed) to verify WSS→RTP→PSTN.
+   * Returns a cancel function.
+   */
+  sendTestTone({ freqHz = 440, durationMs = 3000, amplitude = 0.28 } = {}) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error("websocket not open");
+    }
+    const total = Math.floor((8000 * durationMs) / 1000);
+    let sent = 0;
+    const tick = () => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN || sent >= total) {
+        clearInterval(timer);
+        return;
+      }
+      const pcm = new Int16Array(160);
+      for (let i = 0; i < 160; i++) {
+        const t = (sent + i) / 8000;
+        const s = Math.sin(2 * Math.PI * freqHz * t) * amplitude;
+        pcm[i] = (s < 0 ? s * 0x8000 : s * 0x7fff) | 0;
+      }
+      sent += 160;
+      this.#sendPcm(pcm);
+    };
+    const timer = setInterval(tick, 20);
+    tick();
+    return () => clearInterval(timer);
+  }
+
   #sendJSON(obj) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("websocket not open");

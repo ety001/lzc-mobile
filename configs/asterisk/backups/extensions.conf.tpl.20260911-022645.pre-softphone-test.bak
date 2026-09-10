@@ -11,22 +11,6 @@ priorityjumping=no
 [default]
 ; 默认上下文
 
-; === SOFTPHONE-TEST BEGIN (2026-09-11)
-; Softphone / SIP media self-test numbers (no Quectel).
-; Rollback: delete this whole SOFTPHONE-TEST block, or restore
-; configs/asterisk/backups/extensions.conf.tpl.*.pre-softphone-test.bak
-; 6000 = Echo（能听到自己说话 = 双向媒体正常）
-; 6001 = Milliwatt 持续测试音（能听到蜂鸣 = 下行媒体正常）
-exten => 6000,1,NoOp(Softphone echo test)
-exten => 6000,n,Answer()
-exten => 6000,n,Echo()
-exten => 6000,n,Hangup()
-exten => 6001,1,NoOp(Softphone milliwatt test)
-exten => 6001,n,Answer()
-exten => 6001,n,Milliwatt()
-exten => 6001,n,Hangup()
-; === SOFTPHONE-TEST END ===
-
 ; 外呼前缀路由：从 extension 通过 dongle 外呼
 {{range .Dongles}}
 {{if not .Disable}}

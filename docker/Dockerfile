@@ -13,6 +13,7 @@ WORKDIR /build
 RUN npm install -g pnpm
 COPY internal/frontend/package.json ./
 COPY internal/frontend/pnpm-lock.yaml* ./
+COPY internal/frontend/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile || pnpm install
 
 COPY internal/frontend/ ./

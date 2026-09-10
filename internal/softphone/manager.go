@@ -83,6 +83,7 @@ type Manager struct {
 
 	registered atomic.Bool
 	call       *callHandle
+	dialCancel context.CancelFunc // cancels in-flight Invite when Hangup mid-dial
 
 	clients map[*wsClient]struct{}
 
@@ -166,6 +167,10 @@ func (m *Manager) ConfigureAndStart(extensionID *uint, username, password string
 }
 
 func (m *Manager) stopLocked() {
+	if m.dialCancel != nil {
+		m.dialCancel()
+		m.dialCancel = nil
+	}
 	if m.call != nil {
 		_ = m.call.hangup(context.Background())
 		if m.call.cancel != nil {
@@ -364,6 +369,10 @@ func (m *Manager) Dial(number string) error {
 		m.mu.Unlock()
 		return errors.New("already in a call")
 	}
+	if m.dialCancel != nil {
+		m.mu.Unlock()
+		return errors.New("already dialing")
+	}
 	dg := m.dg
 	username := m.username
 	password := m.password
@@ -374,15 +383,31 @@ func (m *Manager) Dial(number string) error {
 	m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "dialing", CallID: number})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	m.mu.Lock()
+	m.dialCancel = cancel
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		if m.dialCancel != nil {
+			// Invite finished (success or fail); drop pending cancel handle.
+			m.dialCancel = nil
+		}
+		m.mu.Unlock()
+		cancel()
+	}()
+
 	recipient := sip.Uri{User: number, Host: sipHost, Port: sipPort}
 	dialog, err := dg.Invite(ctx, recipient, diago.InviteOptions{
 		Username:  username,
 		Password:  password,
 		Transport: "udp",
 	})
-	cancel()
 	if err != nil {
-		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", Reason: err.Error()})
+		reason := err.Error()
+		if errors.Is(err, context.Canceled) {
+			reason = "cancelled"
+		}
+		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", Reason: reason})
 		return err
 	}
 
@@ -416,10 +441,16 @@ func (m *Manager) Hangup() error {
 	default:
 	}
 
+	// Cancel in-flight outbound Invite (hangup while still dialing).
 	m.mu.Lock()
+	if m.dialCancel != nil {
+		m.dialCancel()
+		m.dialCancel = nil
+	}
 	call := m.call
 	m.mu.Unlock()
 	if call == nil {
+		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", Reason: "local_hangup"})
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

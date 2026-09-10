@@ -238,6 +238,19 @@ Dongle 管理用于配置 USB dongle（GSM Modem）与 Extension 的绑定关系
 
 Softphone 页提供 Echo 探测：测量 WSS PCM 回显单向延迟。建议在真实 `https://lzcmobile...` 下测试；通过标准参考 p95 `< 200ms`。
 
+### 媒体自测号码（Asterisk dialplan）
+
+在 Softphone 直接拨（**不要**加 `999` 外线前缀）：
+
+| 号码 | 作用 |
+|------|------|
+| `6000` | `Echo()`：能听到自己 = 双向媒体正常 |
+| `6001` | `Milliwatt()`：持续测试音 = 下行媒体正常 |
+
+配置位于 `configs/asterisk/extensions.conf.tpl` 的 `SOFTPHONE-TEST` 标记块；改动前请备份到 `configs/asterisk/backups/`。回滚：删除该标记块，或恢复对应 `.pre-softphone-test.bak`。
+
+通话中也可点「发送测试音」从浏览器注入 440Hz（不依赖麦克风）。
+
 ## 最佳实践
 
 1. **定期备份数据库**：数据库文件位于 `/var/lib/lzc-mobile/data.db`，建议定期备份
