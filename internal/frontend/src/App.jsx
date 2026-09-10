@@ -5,6 +5,7 @@ import Extensions from "./pages/Extensions";
 import Dongles from "./pages/Dongles";
 import Settings from "./pages/Settings";
 import SMS from "./pages/SMS";
+import Softphone from "./pages/Softphone";
 import Terminal from "./pages/Terminal";
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="extensions" element={<Extensions />} />
           <Route path="dongles" element={<Dongles />} />
+          <Route path="softphone" element={<Softphone />} />
           <Route path="settings" element={<Settings />} />
           <Route path="sms" element={<SMS />} />
           <Route path="terminal" element={<Terminal />} />

@@ -89,6 +89,7 @@ export default function Layout() {
     { path: "/", label: "仪表盘" },
     { path: "/extensions", label: "Extension" },
     { path: "/dongles", label: "Dongle" },
+    { path: "/softphone", label: "Softphone" },
     { path: "/sms", label: "短信" },
     { path: "/terminal", label: "调试工具" },
     { path: "/settings", label: "设置" },

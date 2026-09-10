@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Settings2, TestTube, Loader2, Bell } from "lucide-react";
 import { settingsAPI } from "@/services/settings";
 import { notificationsAPI } from "@/services/notifications";
+import { extensionsAPI } from "@/services/extensions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,8 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [httpProxy, setHttpProxy] = useState("");
   const [dongleHealthEnabled, setDongleHealthEnabled] = useState(true);
+  const [softphoneExtensionId, setSoftphoneExtensionId] = useState("");
+  const [extensions, setExtensions] = useState([]);
 
   // 通知配置状态
   const [notificationsLoading, setNotificationsLoading] = useState(true);
@@ -58,6 +61,10 @@ export default function Settings() {
   useEffect(() => {
     fetchGlobalSettings();
     fetchNotificationConfigs();
+    extensionsAPI
+      .list()
+      .then((res) => setExtensions(res.data || []))
+      .catch(() => {});
   }, []);
 
   // 全局配置相关函数
@@ -66,6 +73,9 @@ export default function Settings() {
       const response = await settingsAPI.get();
       setHttpProxy(response.data.http_proxy || "");
       setDongleHealthEnabled(response.data.dongle_health_enabled !== false);
+      setSoftphoneExtensionId(
+        response.data.softphone_extension_id ? String(response.data.softphone_extension_id) : ""
+      );
     } catch (error) {
       toast.error("获取配置失败");
     } finally {
@@ -77,7 +87,11 @@ export default function Settings() {
     e.preventDefault();
     setSaving(true);
     try {
-      await settingsAPI.update({ http_proxy: httpProxy, dongle_health_enabled: dongleHealthEnabled });
+      await settingsAPI.update({
+        http_proxy: httpProxy,
+        dongle_health_enabled: dongleHealthEnabled,
+        softphone_extension_id: softphoneExtensionId ? Number(softphoneExtensionId) : null,
+      });
       toast.success("配置保存成功");
     } catch (error) {
       toast.error("保存失败", { description: error.response?.data?.error || error.message });
@@ -215,6 +229,30 @@ export default function Settings() {
                         checked={dongleHealthEnabled}
                         onCheckedChange={(checked) => setDongleHealthEnabled(checked)}
                       />
+                    </div>
+
+                    <div className="space-y-2 rounded-lg border p-4">
+                      <div className="font-medium">Web Softphone 分机</div>
+                      <p className="text-sm text-muted-foreground">
+                        指定供浏览器 Softphone 使用的 Extension。未指定时 Softphone 不可用（不会自动选第一个）。
+                      </p>
+                      <Select
+                        value={softphoneExtensionId || "none"}
+                        onValueChange={(v) => setSoftphoneExtensionId(v === "none" ? "" : v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="未指定（Softphone 不可用）" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">未指定（Softphone 不可用）</SelectItem>
+                          {extensions.map((ext) => (
+                            <SelectItem key={ext.id} value={String(ext.id)}>
+                              {ext.username}
+                              {ext.callerid ? ` (${ext.callerid})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <Button type="submit" disabled={saving}>
