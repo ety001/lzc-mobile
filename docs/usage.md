@@ -218,6 +218,26 @@ Dongle 管理用于配置 USB dongle（GSM Modem）与 Extension 的绑定关系
 2. 检查环境变量 `ASTERISK_AMI_USERNAME` 和 `ASTERISK_AMI_PASSWORD` 是否正确
 3. 查看容器日志了解详细错误信息
 
+## Web Softphone（浏览器软电话）
+
+浏览器 Softphone **不使用 WebRTC**。信令与语音全部走懒猫 HTTPS 的同源 WSS（443 隧道），由服务端 Go SIP UA 在本机向 Asterisk 注册并桥接 RTP。
+
+### 启用步骤
+
+1. 先在「Extension」中创建至少一个分机（可与 MizuDroid 共用同一分机，多 Contact）。
+2. 打开「设置 → 全局配置 → Web Softphone 分机」，**显式选择**一个 Extension 并保存。
+3. **未指定分机时 Softphone 不可用**（不会自动使用第一个分机）。
+4. 打开「Softphone」页：连接 → 开启麦克风 → 拨号 / 接听。
+
+### 与 MizuDroid 的关系
+
+- MizuDroid 等原生客户端仍走 L4 SIP（UDP/TCP 5060）与 RTP 端口段。
+- Web Softphone 只走 `https://lzcmobile.<box>.heiyu.space` 的 WSS，不依赖 L4 媒体。
+
+### 验证 A（WSS Echo）
+
+Softphone 页提供 Echo 探测：测量 WSS PCM 回显单向延迟。建议在真实 `https://lzcmobile...` 下测试；通过标准参考 p95 `< 200ms`。
+
 ## 最佳实践
 
 1. **定期备份数据库**：数据库文件位于 `/var/lib/lzc-mobile/data.db`，建议定期备份
