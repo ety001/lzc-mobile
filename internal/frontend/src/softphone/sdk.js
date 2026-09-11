@@ -98,6 +98,15 @@ export class SoftphoneSDK {
     this.#sendJSON({ type: "hangup" });
   }
 
+  /** Send in-call DTMF (0-9, *, #). */
+  dtmf(digit) {
+    const d = String(digit || "");
+    if (!/^[0-9*#A-Da-d]$/.test(d)) {
+      throw new Error(`invalid DTMF digit: ${digit}`);
+    }
+    this.#sendJSON({ type: "dtmf", digit: d.toUpperCase() });
+  }
+
   ping() {
     this.#sendJSON({ type: "ping" });
   }

@@ -175,6 +175,19 @@ export default function Softphone() {
   };
 
   const handleDialKey = (key) => {
+    if (busy) {
+      // In-call: send DTMF for IVR menus (e.g. 10010).
+      (async () => {
+        try {
+          const sdk = await ensureSDK();
+          sdk.dtmf(key);
+          pushLog(`dtmf ${key}`);
+        } catch (e) {
+          toast.error("按键失败", { description: e.message || String(e) });
+        }
+      })();
+      return;
+    }
     setNumber((n) => `${n}${key}`);
   };
 
@@ -270,7 +283,7 @@ export default function Softphone() {
                   type="button"
                   variant="secondary"
                   className="h-12 text-lg font-semibold"
-                  disabled={!configured || busy}
+                  disabled={!configured || (busy && !connected)}
                   onClick={() => handleDialKey(key)}
                 >
                   {key}
@@ -304,7 +317,8 @@ export default function Softphone() {
             </div>
             <p className="text-xs text-muted-foreground space-y-1">
               <span className="block">媒体自测（无需外线）：拨 <code>6000</code> 回声 / <code>6001</code> 测试音。</span>
-              <span className="block">外线需加 Dongle 前缀，例如 <code>999</code> + 手机号。通话中也可点「发送测试音」。</span>
+              <span className="block">外线需加 Dongle 前缀，例如 <code>999</code> + 手机号。</span>
+              <span className="block">通话中拨号盘发送 DTMF（语音菜单按键）；空闲时用于输入号码。</span>
             </p>
 
             {incoming && (

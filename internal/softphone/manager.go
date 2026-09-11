@@ -24,6 +24,7 @@ const (
 	MsgTypeCall      = "call"
 	MsgTypeAnswer    = "answer"
 	MsgTypeHangup    = "hangup"
+	MsgTypeDTMF      = "dtmf"
 	MsgTypeIncoming  = "incoming"
 	MsgTypeCallState = "call_state"
 	MsgTypeError     = "error"
@@ -34,6 +35,7 @@ const (
 type ControlMessage struct {
 	Type    string `json:"type"`
 	Number  string `json:"number,omitempty"`
+	Digit   string `json:"digit,omitempty"` // DTMF: 0-9, *, #, A-D
 	From    string `json:"from,omitempty"`
 	CallID  string `json:"call_id,omitempty"`
 	State   string `json:"state,omitempty"`
@@ -90,6 +92,7 @@ type Manager struct {
 	answerCh      chan struct{}
 	rejectCh      chan struct{}
 	activeEncoder io.Writer
+	activeDTMF    *diago.DTMFWriter
 }
 
 type wsClient struct {
@@ -347,6 +350,14 @@ func (m *Manager) HandleControl(c *wsClient, msg ControlMessage) {
 				c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: err.Error()}))
 			}
 		}()
+	case MsgTypeDTMF:
+		digit := msg.Digit
+		go func() {
+			if err := m.SendDTMF(digit); err != nil {
+				log.Printf("[softphone] dtmf: %v", err)
+				c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: err.Error()}))
+			}
+		}()
 	default:
 		c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: "unknown control type: " + msg.Type}))
 	}
@@ -597,7 +608,8 @@ func (m *Manager) runMediaBridge(ctx context.Context, call *callHandle) {
 		log.Printf("[softphone] AudioReader: %v", err)
 		return
 	}
-	writer, err := call.media.AudioWriter()
+	var dtmfWriter diago.DTMFWriter
+	writer, err := call.media.AudioWriter(diago.WithAudioWriterDTMF(&dtmfWriter))
 	if err != nil {
 		log.Printf("[softphone] AudioWriter: %v", err)
 		return
@@ -627,13 +639,62 @@ func (m *Manager) runMediaBridge(ctx context.Context, call *callHandle) {
 
 	m.mu.Lock()
 	m.activeEncoder = enc
+	m.activeDTMF = &dtmfWriter
 	m.mu.Unlock()
 
 	<-ctx.Done()
 
 	m.mu.Lock()
 	m.activeEncoder = nil
+	m.activeDTMF = nil
 	m.mu.Unlock()
+}
+
+// SendDTMF sends one DTMF digit on the active call (RFC2833 + AMI PlayDTMF fallback).
+func (m *Manager) SendDTMF(digit string) error {
+	if len(digit) != 1 || !isDTMFDigit(digit[0]) {
+		return fmt.Errorf("invalid DTMF digit %q", digit)
+	}
+	m.mu.Lock()
+	w := m.activeDTMF
+	ext := m.username
+	inCall := m.call != nil
+	m.mu.Unlock()
+	if !inCall {
+		return errors.New("not in a call")
+	}
+
+	var rtpErr error
+	if w != nil {
+		rtpErr = w.WriteDTMF(rune(digit[0]))
+		if rtpErr != nil {
+			log.Printf("[softphone] RTP DTMF %q failed: %v", digit, rtpErr)
+		} else {
+			log.Printf("[softphone] RTP DTMF sent %q", digit)
+		}
+	}
+
+	// AMI PlayDTMF is important for Quectel/IVR relay even when RTP path works.
+	if ext != "" {
+		if err := playDTMFViaAMI(ext, digit); err != nil {
+			log.Printf("[softphone] AMI DTMF %q failed: %v", digit, err)
+			if rtpErr != nil {
+				return fmt.Errorf("dtmf failed: rtp=%v ami=%v", rtpErr, err)
+			}
+		}
+	} else if rtpErr != nil {
+		return rtpErr
+	}
+	return nil
+}
+
+func isDTMFDigit(b byte) bool {
+	switch b {
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '#', 'A', 'B', 'C', 'D', 'a', 'b', 'c', 'd':
+		return true
+	default:
+		return false
+	}
 }
 
 // PushPCM writes one PCM16 frame from a browser client into the active call.
