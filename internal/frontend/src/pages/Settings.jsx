@@ -4,6 +4,7 @@ import { Settings2, TestTube, Loader2, Bell } from "lucide-react";
 import { settingsAPI } from "@/services/settings";
 import { notificationsAPI } from "@/services/notifications";
 import { extensionsAPI } from "@/services/extensions";
+import { useSoftphone } from "@/softphone/SoftphoneContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ const CHANNELS = [
 ];
 
 export default function Settings() {
+  const softphone = useSoftphone();
   const [activeTab, setActiveTab] = useState("global");
 
   // 全局配置状态
@@ -93,6 +95,11 @@ export default function Settings() {
         softphone_extension_id: softphoneExtensionId ? Number(softphoneExtensionId) : null,
       });
       toast.success("配置保存成功");
+      try {
+        await softphone.refreshStatus();
+      } catch {
+        /* refresh best-effort */
+      }
     } catch (error) {
       toast.error("保存失败", { description: error.response?.data?.error || error.message });
     } finally {

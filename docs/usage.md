@@ -227,7 +227,9 @@ Dongle 管理用于配置 USB dongle（GSM Modem）与 Extension 的绑定关系
 1. 先在「Extension」中创建至少一个分机（可与 MizuDroid 共用同一分机，多 Contact）。
 2. 打开「设置 → 全局配置 → Web Softphone 分机」，**显式选择**一个 Extension 并保存。
 3. **未指定分机时 Softphone 不可用**（不会自动使用第一个分机）。
-4. 打开「Softphone」页：连接 → 开启麦克风 → 拨号 / 接听。
+4. 配置保存后，应用会**自动连接** Softphone WSS；切换页面不断开。
+5. 用顶栏 **电话图标** 打开拨号抽屉：拨号 / DTMF / 挂断 / 接听。关闭抽屉不会挂断。
+6. 「Softphone」页保留 Echo 探测与事件日志；也可从该页打开拨号盘。
 
 ### 与 MizuDroid 的关系
 
