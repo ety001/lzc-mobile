@@ -326,15 +326,27 @@ func (m *Manager) HandleControl(c *wsClient, msg ControlMessage) {
 	case MsgTypePing:
 		c.writeText(mustJSON(ControlMessage{Type: MsgTypePong}))
 	case MsgTypeCall:
-		if err := m.Dial(msg.Number); err != nil {
-			c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: err.Error()}))
-		}
+		// Never block the WS read loop — otherwise hangup/answer cannot be processed
+		// until Invite finishes (can be tens of seconds).
+		number := msg.Number
+		go func() {
+			if err := m.Dial(number); err != nil {
+				// Canceled by local hangup is expected — do not surface as error toast.
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: err.Error()}))
+			}
+		}()
 	case MsgTypeAnswer:
 		m.signalAnswer()
 	case MsgTypeHangup:
-		if err := m.Hangup(); err != nil {
-			c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: err.Error()}))
-		}
+		go func() {
+			if err := m.Hangup(); err != nil {
+				log.Printf("[softphone] hangup: %v", err)
+				c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: err.Error()}))
+			}
+		}()
 	default:
 		c.writeText(mustJSON(ControlMessage{Type: MsgTypeError, Message: "unknown control type: " + msg.Type}))
 	}
@@ -378,18 +390,17 @@ func (m *Manager) Dial(number string) error {
 	password := m.password
 	sipHost := m.sipHost
 	sipPort := m.sipPort
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	m.dialCancel = cancel
 	m.mu.Unlock()
 
 	m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "dialing", CallID: number})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	m.mu.Lock()
-	m.dialCancel = cancel
-	m.mu.Unlock()
 	defer func() {
 		m.mu.Lock()
+		// Only clear if we still own this cancel (Hangup may have nil'd it already).
 		if m.dialCancel != nil {
-			// Invite finished (success or fail); drop pending cancel handle.
 			m.dialCancel = nil
 		}
 		m.mu.Unlock()
@@ -403,12 +414,19 @@ func (m *Manager) Dial(number string) error {
 		Transport: "udp",
 	})
 	if err != nil {
-		reason := err.Error()
-		if errors.Is(err, context.Canceled) {
-			reason = "cancelled"
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Hangup already broadcast "ended" when it canceled the dial.
+			return context.Canceled
 		}
-		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", Reason: reason})
+		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", Reason: err.Error()})
 		return err
+	}
+
+	// Hangup may have canceled the dial context just as Invite succeeded.
+	if ctx.Err() != nil {
+		_ = dialog.Hangup(context.Background())
+		_ = dialog.Close()
+		return context.Canceled
 	}
 
 	callCtx, callCancel := context.WithCancel(context.Background())
@@ -422,6 +440,13 @@ func (m *Manager) Dial(number string) error {
 	}
 
 	m.mu.Lock()
+	if m.call != nil {
+		m.mu.Unlock()
+		_ = dialog.Hangup(context.Background())
+		_ = dialog.Close()
+		callCancel()
+		return errors.New("already in a call")
+	}
 	m.call = h
 	m.mu.Unlock()
 
@@ -441,26 +466,40 @@ func (m *Manager) Hangup() error {
 	default:
 	}
 
-	// Cancel in-flight outbound Invite (hangup while still dialing).
 	m.mu.Lock()
+	canceledDial := false
 	if m.dialCancel != nil {
 		m.dialCancel()
 		m.dialCancel = nil
+		canceledDial = true
 	}
 	call := m.call
+	m.call = nil // detach immediately so UI / further hangups see idle
 	m.mu.Unlock()
+
 	if call == nil {
-		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", Reason: "local_hangup"})
+		if canceledDial {
+			m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", Reason: "local_hangup"})
+		}
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := call.hangup(ctx)
+
 	if call.cancel != nil {
 		call.cancel()
 	}
-	m.clearCall(call.id, "local_hangup")
-	return err
+	// Close media first so RTP stops; Bye in background with timeout.
+	if call.media != nil {
+		_ = call.media.Close()
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := call.hangup(ctx); err != nil {
+			log.Printf("[softphone] BYE failed: %v", err)
+		}
+	}()
+	m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", CallID: call.id, Reason: "local_hangup"})
+	return nil
 }
 
 func (m *Manager) clearCall(id, reason string) {

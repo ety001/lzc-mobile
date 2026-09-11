@@ -138,8 +138,8 @@ export default function Softphone() {
   };
 
   const handleHangup = async () => {
+    if (callState === "idle") return;
     try {
-      // Prefer existing SDK; reconnect if WS dropped so hangup can still be sent.
       const sdk = sdkRef.current || (await ensureSDK());
       if (sdkRef.current) {
         try {
@@ -149,9 +149,9 @@ export default function Softphone() {
           /* still try hangup if socket somehow open */
         }
       }
-      sdk.hangup();
-      setIncoming(null);
       setCallState("idle");
+      setIncoming(null);
+      sdk.hangup();
       pushLog("hangup sent");
     } catch (e) {
       setCallState("idle");
