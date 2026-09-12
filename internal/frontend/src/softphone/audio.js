@@ -1,6 +1,6 @@
 /**
  * Capture mic as 20ms PCM16@8kHz frames and play received PCM frames.
- * Uses AudioWorklet when available, falls back to ScriptProcessor.
+ * Playback can run without mic; mic defaults off until enableMic().
  */
 
 import { PCM_FRAME_SAMPLES, PCM_FRAME_BYTES } from "./frame";
@@ -45,59 +45,95 @@ export class SoftphoneAudio {
     this.pending = new Float32Array(0);
     this.playTime = 0;
     this.jitterSec = 0.06;
-    this.running = false;
+    this.playbackReady = false;
+    this.micEnabled = false;
   }
 
-  async start() {
-    if (this.running) return;
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        channelCount: 1,
-      },
-      video: false,
-    });
+  async ensurePlayback() {
+    if (this.ctx) {
+      if (this.ctx.state === "suspended") await this.ctx.resume();
+      this.playbackReady = true;
+      return;
+    }
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     await this.ctx.resume();
-    this.source = this.ctx.createMediaStreamSource(this.stream);
-
-    const bufferSize = 4096;
-    this.processor = this.ctx.createScriptProcessor(bufferSize, 1, 1);
-    this.processor.onaudioprocess = (ev) => {
-      if (!this.running || !this.onPcmFrame) return;
-      const input = ev.inputBuffer.getChannelData(0);
-      const down = downsampleTo8k(input, this.ctx.sampleRate);
-      const merged = new Float32Array(this.pending.length + down.length);
-      merged.set(this.pending);
-      merged.set(down, this.pending.length);
-      let offset = 0;
-      while (merged.length - offset >= PCM_FRAME_SAMPLES) {
-        const slice = merged.subarray(offset, offset + PCM_FRAME_SAMPLES);
-        const pcm = floatToPCM16(slice);
-        this.onPcmFrame(pcm);
-        offset += PCM_FRAME_SAMPLES;
-      }
-      this.pending = merged.subarray(offset);
-    };
-
-    this.source.connect(this.processor);
-    // Avoid mic monitor feedback: process without audible local loopback.
-    const mute = this.ctx.createGain();
-    mute.gain.value = 0;
-    this.processor.connect(mute);
-    mute.connect(this.ctx.destination);
     this.playTime = this.ctx.currentTime + this.jitterSec;
-    this.running = true;
+    this.playbackReady = true;
+  }
+
+  /** @deprecated use ensurePlayback + enableMic */
+  async start() {
+    await this.ensurePlayback();
+    await this.enableMic();
+  }
+
+  async enableMic() {
+    await this.ensurePlayback();
+    if (this.micEnabled && this.stream) {
+      this.stream.getAudioTracks().forEach((t) => {
+        t.enabled = true;
+      });
+      this.micEnabled = true;
+      return;
+    }
+
+    if (!this.stream) {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          channelCount: 1,
+        },
+        video: false,
+      });
+      this.source = this.ctx.createMediaStreamSource(this.stream);
+
+      const bufferSize = 4096;
+      this.processor = this.ctx.createScriptProcessor(bufferSize, 1, 1);
+      this.processor.onaudioprocess = (ev) => {
+        if (!this.micEnabled || !this.onPcmFrame) return;
+        const input = ev.inputBuffer.getChannelData(0);
+        const down = downsampleTo8k(input, this.ctx.sampleRate);
+        const merged = new Float32Array(this.pending.length + down.length);
+        merged.set(this.pending);
+        merged.set(down, this.pending.length);
+        let offset = 0;
+        while (merged.length - offset >= PCM_FRAME_SAMPLES) {
+          const slice = merged.subarray(offset, offset + PCM_FRAME_SAMPLES);
+          const pcm = floatToPCM16(slice);
+          this.onPcmFrame(pcm);
+          offset += PCM_FRAME_SAMPLES;
+        }
+        this.pending = merged.subarray(offset);
+      };
+
+      this.source.connect(this.processor);
+      const mute = this.ctx.createGain();
+      mute.gain.value = 0;
+      this.processor.connect(mute);
+      mute.connect(this.ctx.destination);
+    } else {
+      this.stream.getAudioTracks().forEach((t) => {
+        t.enabled = true;
+      });
+    }
+    this.micEnabled = true;
+  }
+
+  disableMic() {
+    this.micEnabled = false;
+    this.pending = new Float32Array(0);
+    this.stream?.getAudioTracks().forEach((t) => {
+      t.enabled = false;
+    });
   }
 
   playPcm16(pcmBytes) {
-    if (!this.ctx || !this.running) return;
+    if (!this.ctx || !this.playbackReady) return;
     const aligned = pcmBytes.byteLength % 2 === 0 ? pcmBytes : pcmBytes.subarray(0, pcmBytes.byteLength - 1);
     const pcm16 = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 2);
     const floats = pcm16ToFloat(pcm16);
 
-    // Resample 8k -> AudioContext rate via simple hold
     const ratio = this.ctx.sampleRate / 8000;
     const outLen = Math.floor(floats.length * ratio);
     const out = new Float32Array(outLen);
@@ -115,7 +151,6 @@ export class SoftphoneAudio {
     if (this.playTime < now) {
       this.playTime = now + 0.02;
     }
-    // Drop if backlog too large (>250ms)
     if (this.playTime - now > 0.25) {
       this.playTime = now + this.jitterSec;
       return;
@@ -125,7 +160,8 @@ export class SoftphoneAudio {
   }
 
   async stop() {
-    this.running = false;
+    this.micEnabled = false;
+    this.playbackReady = false;
     try {
       this.processor?.disconnect();
       this.source?.disconnect();

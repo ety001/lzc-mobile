@@ -73,7 +73,17 @@ export class SoftphoneSDK {
 
   async enableMic() {
     if (!this.audio) throw new Error("not connected");
-    await this.audio.start();
+    await this.audio.enableMic();
+  }
+
+  disableMic() {
+    this.audio?.disableMic();
+  }
+
+  /** Ensure AudioContext is ready for downlink playback (no mic). */
+  async ensurePlayback() {
+    if (!this.audio) throw new Error("not connected");
+    await this.audio.ensurePlayback();
   }
 
   disconnect() {

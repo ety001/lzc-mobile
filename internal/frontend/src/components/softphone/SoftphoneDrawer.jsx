@@ -1,9 +1,11 @@
-import { Delete, Mic, Phone, PhoneIncoming, PhoneOff, X } from "lucide-react";
+import { Delete, Eraser, Mic, Phone, PhoneIncoming, PhoneOff, X } from "lucide-react";
+import { toast } from "sonner";
 import { useSoftphone } from "@/softphone/SoftphoneContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 const DIAL_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
@@ -13,6 +15,14 @@ export default function SoftphoneDrawer() {
   if (!sp.drawerOpen) return null;
 
   const canHangup = sp.configured && (sp.connected || sp.busy || !!sp.incoming);
+
+  const onMicSwitch = async (on) => {
+    try {
+      await sp.setMicEnabled(on);
+    } catch (e) {
+      toast.error("麦克风切换失败", { description: e.message || String(e) });
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60]">
@@ -50,6 +60,22 @@ export default function SoftphoneDrawer() {
           <Badge variant={sp.registered ? "default" : "outline"}>{sp.registered ? "已注册" : "未注册"}</Badge>
           <Badge variant="outline">分机 {sp.extension || "-"}</Badge>
           <Badge variant="outline">状态 {sp.callState}</Badge>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-3 mb-4">
+          <div className="flex items-center gap-2">
+            <Mic className="h-4 w-4" />
+            <div>
+              <div className="text-sm font-medium">麦克风</div>
+              <div className="text-xs text-muted-foreground">{sp.micOn ? "已开启" : "已关闭（默认）"}</div>
+            </div>
+          </div>
+          <Switch
+            checked={sp.micOn}
+            onCheckedChange={onMicSwitch}
+            disabled={!sp.configured || !sp.connected}
+            aria-label="麦克风开关"
+          />
         </div>
 
         {sp.incoming ? (
@@ -93,11 +119,20 @@ export default function SoftphoneDrawer() {
           <Button
             type="button"
             variant="outline"
-            className="h-12 col-span-3"
+            className="h-12"
             disabled={!sp.configured || !sp.number || sp.busy}
             onClick={sp.dialBackspace}
           >
             <Delete className="h-4 w-4 mr-1" /> 删除
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 col-span-2"
+            disabled={!sp.configured || !sp.number || sp.busy}
+            onClick={sp.dialClear}
+          >
+            <Eraser className="h-4 w-4 mr-1" /> 清空
           </Button>
         </div>
 
@@ -111,15 +146,6 @@ export default function SoftphoneDrawer() {
           </Button>
           <Button type="button" variant="destructive" onClick={sp.hangup} disabled={!canHangup}>
             <PhoneOff className="h-4 w-4 mr-1" /> 挂断
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => sp.enableMic().catch(() => {})}
-            disabled={!sp.configured || !sp.connected || sp.micOn}
-          >
-            <Mic className="h-4 w-4 mr-1" />
-            {sp.micOn ? "麦克风已开" : "开启麦克风"}
           </Button>
         </div>
 

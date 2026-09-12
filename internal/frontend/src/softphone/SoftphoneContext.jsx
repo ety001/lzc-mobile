@@ -201,6 +201,21 @@ export function SoftphoneProvider({ children }) {
     pushLog("microphone enabled");
   }, [connectInternal, connected, ensureSDK, pushLog]);
 
+  const disableMic = useCallback(() => {
+    const sdk = sdkRef.current || ensureSDK();
+    sdk.disableMic();
+    setMicOn(false);
+    pushLog("microphone disabled");
+  }, [ensureSDK, pushLog]);
+
+  const setMicEnabled = useCallback(
+    async (on) => {
+      if (on) await enableMic();
+      else disableMic();
+    },
+    [disableMic, enableMic]
+  );
+
   const call = useCallback(
     async (num) => {
       const target = (num ?? number).trim();
@@ -215,11 +230,7 @@ export function SoftphoneProvider({ children }) {
       try {
         const sdk = ensureSDK();
         if (!connected) await connectInternal();
-        if (!micOn) {
-          await sdk.enableMic();
-          setMicOn(true);
-          pushLog("microphone enabled");
-        }
+        await sdk.ensurePlayback();
         sdk.call(target);
         setCallState("dialing");
         pushLog(`call ${target}`);
@@ -227,25 +238,21 @@ export function SoftphoneProvider({ children }) {
         toast.error("呼叫失败", { description: e.message || String(e) });
       }
     },
-    [connectInternal, connected, ensureSDK, micOn, number, pushLog]
+    [connectInternal, connected, ensureSDK, number, pushLog]
   );
 
   const answer = useCallback(async () => {
     try {
       const sdk = ensureSDK();
       if (!connected) await connectInternal();
-      if (!micOn) {
-        await sdk.enableMic();
-        setMicOn(true);
-        pushLog("microphone enabled");
-      }
+      await sdk.ensurePlayback();
       sdk.answer();
       setIncoming(null);
       pushLog("answer sent");
     } catch (e) {
       toast.error("接听失败", { description: e.message || String(e) });
     }
-  }, [connectInternal, connected, ensureSDK, micOn, pushLog]);
+  }, [connectInternal, connected, ensureSDK, pushLog]);
 
   const hangup = useCallback(async () => {
     if (callState === "idle" && !incoming) return;
@@ -301,6 +308,10 @@ export function SoftphoneProvider({ children }) {
     setNumber((n) => n.slice(0, -1));
   }, []);
 
+  const dialClear = useCallback(() => {
+    setNumber("");
+  }, []);
+
   const value = useMemo(
     () => ({
       configured,
@@ -320,12 +331,15 @@ export function SoftphoneProvider({ children }) {
       pushLog,
       refreshStatus,
       enableMic,
+      disableMic,
+      setMicEnabled,
       call,
       answer,
       hangup,
       dtmf,
       dialKey,
       dialBackspace,
+      dialClear,
       sendTestTone,
       busy: IN_CALL_STATES.has(callState),
     }),
@@ -337,7 +351,9 @@ export function SoftphoneProvider({ children }) {
       configured,
       connected,
       dialBackspace,
+      dialClear,
       dialKey,
+      disableMic,
       drawerOpen,
       dtmf,
       enableMic,
@@ -352,6 +368,7 @@ export function SoftphoneProvider({ children }) {
       refreshStatus,
       registered,
       sendTestTone,
+      setMicEnabled,
     ]
   );
 
