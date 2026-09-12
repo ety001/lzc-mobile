@@ -41,7 +41,8 @@ device_state_busy_at = 1
 [aor-template](!)
 type = aor
 max_contacts = 10
-remove_existing = yes
+; Keep multi-Contact (Softphone + Mizu etc). remove_existing=yes would wipe peers on each REGISTER.
+remove_existing = no
 qualify_frequency = 60
 qualify_timeout = 3.0
 
@@ -56,7 +57,7 @@ auth_type = userpass
 [{{.Username}}](aor-template)
 type = aor
 qualify_frequency = 60
-remove_existing = yes
+remove_existing = no
 
 ; Auth for {{.Username}}
 [{{.Username}}-auth](auth-template)

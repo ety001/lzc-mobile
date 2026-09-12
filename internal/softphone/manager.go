@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -191,9 +192,15 @@ func (m *Manager) stopLocked() {
 	}
 	m.dg = nil
 	m.registered.Store(false)
+	// diago/sipgo may take a moment to release the UDP bind after Close.
+	waitUDPPortFree(m.bindHost, m.bindPort, 3*time.Second)
 }
 
 func (m *Manager) startLocked() error {
+	if err := waitUDPPortFree(m.bindHost, m.bindPort, 3*time.Second); err != nil {
+		return fmt.Errorf("softphone udp bind %s:%d still busy: %w", m.bindHost, m.bindPort, err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	m.ctx = ctx
 	m.cancel = cancel
@@ -215,28 +222,39 @@ func (m *Manager) startLocked() error {
 	}))
 	m.dg = dg
 
-	go func() {
-		err := dg.Serve(ctx, func(inDialog *diago.DialogServerSession) {
-			m.handleInbound(inDialog)
-		})
-		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Printf("[softphone] serve ended: %v", err)
-		}
-	}()
+	username := m.username
+	password := m.password
+	sipHost := m.sipHost
+	sipPort := m.sipPort
+	extID := *m.extID
 
-	recipient := sip.Uri{User: m.username, Host: m.sipHost, Port: m.sipPort}
+	// ServeBackground waits until the UDP listener is in sipgo's connection pool.
+	// Register must reuse that socket (same BindPort); racing go Serve+Register causes
+	// "listen udp 127.0.0.1:15070: bind: address already in use" and permanent unreg.
+	if err := dg.ServeBackground(ctx, func(inDialog *diago.DialogServerSession) {
+		m.handleInbound(inDialog)
+	}); err != nil {
+		cancel()
+		_ = ua.Close()
+		m.ua = nil
+		m.dg = nil
+		m.cancel = nil
+		return fmt.Errorf("sip serve: %w", err)
+	}
+
+	recipient := sip.Uri{User: username, Host: sipHost, Port: sipPort}
 	regOpts := diago.RegisterOptions{
-		Username: m.username,
-		Password: m.password,
+		Username: username,
+		Password: password,
 		Expiry:   60 * time.Second,
 		OnRegistered: func() {
 			m.registered.Store(true)
-			log.Printf("[softphone] registered as %s", m.username)
+			log.Printf("[softphone] registered as %s", username)
 			m.Broadcast(ControlMessage{
 				Type:       MsgTypeStatus,
 				Configured: true,
 				Registered: true,
-				Extension:  m.username,
+				Extension:  username,
 				CallState:  m.callState(),
 			})
 		},
@@ -248,11 +266,61 @@ func (m *Manager) startLocked() error {
 			log.Printf("[softphone] register loop ended: %v", err)
 			m.registered.Store(false)
 			m.Broadcast(ControlMessage{Type: MsgTypeError, Message: "SIP registration failed: " + err.Error()})
+			m.scheduleRestart(extID, username, password, sipPort, err)
 		}
 	}()
 
 	m.broadcastLocked(m.statusLocked())
 	return nil
+}
+
+// scheduleRestart recovers from unexpected serve/register death (e.g. UDP bind race).
+// Without this, Asterisk contact expires and extension-to-extension dials get CHANUNAVAIL.
+func (m *Manager) scheduleRestart(extID uint, username, password string, sipPort int, cause error) {
+	go func() {
+		time.Sleep(2 * time.Second)
+		m.mu.Lock()
+		if m.extID == nil || *m.extID != extID || m.username != username || m.password != password {
+			m.mu.Unlock()
+			return
+		}
+		// Already running a healthy UA for this config.
+		if m.dg != nil && m.registered.Load() {
+			m.mu.Unlock()
+			return
+		}
+		log.Printf("[softphone] restarting UA after failure: %v", cause)
+		m.stopLocked()
+		err := m.startLocked()
+		m.mu.Unlock()
+		if err != nil {
+			log.Printf("[softphone] restart failed: %v", err)
+			m.scheduleRestart(extID, username, password, sipPort, err)
+		}
+	}()
+}
+
+func waitUDPPortFree(host string, port int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	addr := fmt.Sprintf("%s:%d", host, port)
+	for {
+		if udpBindAvailable(host, port) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("port %s still in use", addr)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func udpBindAvailable(host string, port int) bool {
+	pc, err := net.ListenPacket("udp", fmt.Sprintf("%s:%d", host, port))
+	if err != nil {
+		return false
+	}
+	_ = pc.Close()
+	return true
 }
 
 func (m *Manager) statusLocked() ControlMessage {
