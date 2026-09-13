@@ -33,8 +33,6 @@ export function SoftphoneProvider({ children }) {
   const [logLines, setLogLines] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const ringingKeyRef = useRef(null);
-  const audioABProfileRef = useRef("A");
-  const [audioABProfile, setAudioABProfile] = useState("A");
 
   const pushLog = useCallback((line) => {
     setLogLines((prev) => [`${new Date().toLocaleTimeString()} ${line}`, ...prev].slice(0, 80));
@@ -106,10 +104,6 @@ export function SoftphoneProvider({ children }) {
       if (typeof msg.registered === "boolean") setRegistered(msg.registered);
       if (msg.extension != null) setExtension(msg.extension || "");
       if (msg.call_state) setCallState(msg.call_state);
-      if (msg.audio_ab_profile === "A" || msg.audio_ab_profile === "B") {
-        audioABProfileRef.current = msg.audio_ab_profile;
-        setAudioABProfile(msg.audio_ab_profile);
-      }
       // Deeplink / reconnect: status may already be ringing before any incoming event.
       if (msg.call_state === "ringing" && (msg.from || msg.call_id)) {
         beginIncomingUI(
@@ -117,9 +111,7 @@ export function SoftphoneProvider({ children }) {
           { toastNotify: false }
         );
       }
-      pushLog(
-        `status registered=${msg.registered} ext=${msg.extension || "-"} call=${msg.call_state || "-"} ab=${msg.audio_ab_profile || "-"}`
-      );
+      pushLog(`status registered=${msg.registered} ext=${msg.extension || "-"} call=${msg.call_state || "-"}`);
     });
     sdk.on("incoming", (msg) => {
       beginIncomingUI(msg, { toastNotify: true });
@@ -202,10 +194,6 @@ export function SoftphoneProvider({ children }) {
       setRegistered(!!data.registered);
       setExtension(data.extension || "");
       if (data.call_state) setCallState(data.call_state);
-      if (data.audio_ab_profile === "A" || data.audio_ab_profile === "B") {
-        audioABProfileRef.current = data.audio_ab_profile;
-        setAudioABProfile(data.audio_ab_profile);
-      }
       if (data.call_state === "ringing" && (data.from || data.call_id)) {
         setIncoming({ from: data.from, call_id: data.call_id });
         setDrawerOpen(true);
@@ -241,10 +229,6 @@ export function SoftphoneProvider({ children }) {
         setRegistered(!!data.registered);
         setExtension(data.extension || "");
         if (data.call_state) setCallState(data.call_state);
-        if (data.audio_ab_profile === "A" || data.audio_ab_profile === "B") {
-          audioABProfileRef.current = data.audio_ab_profile;
-          setAudioABProfile(data.audio_ab_profile);
-        }
         if (data.call_state === "ringing" && (data.from || data.call_id)) {
           setIncoming({ from: data.from, call_id: data.call_id });
           setDrawerOpen(true);
@@ -302,14 +286,9 @@ export function SoftphoneProvider({ children }) {
   );
 
   const armMediaForCall = useCallback(async (sdk) => {
-    const profile = audioABProfileRef.current === "B" ? "B" : "A";
-    if (profile === "A") {
-      await sdk.startMedia();
-    } else {
-      await sdk.enableMic();
-    }
+    await sdk.startMedia();
     setMicOn(true);
-    pushLog(`media armed profile=${profile}`);
+    pushLog("media armed");
   }, [pushLog]);
 
   const call = useCallback(
@@ -425,7 +404,6 @@ export function SoftphoneProvider({ children }) {
       micOn,
       logLines,
       drawerOpen,
-      audioABProfile,
       openDrawer,
       closeDrawer,
       setDrawerOpen,
@@ -446,7 +424,6 @@ export function SoftphoneProvider({ children }) {
     }),
     [
       answer,
-      audioABProfile,
       call,
       callState,
       closeDrawer,

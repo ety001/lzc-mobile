@@ -33,9 +33,7 @@ direct_media = no
 rtp_symmetric = yes
 force_rport = yes
 rewrite_contact = yes
-{{if eq .AudioABProfile "B"}}
 media_use_received_transport = yes
-{{end}}
 send_pai = yes
 trust_connected_line = yes
 device_state_busy_at = 1

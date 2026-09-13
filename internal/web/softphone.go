@@ -113,12 +113,6 @@ func reloadSoftphoneFromDB() {
 		return
 	}
 
-	profile := cfg.AudioABProfile
-	if profile != "B" {
-		profile = "A"
-	}
-	softphone.GetManager().SetAudioABProfile(profile)
-
 	var sipPort int
 	var sip database.SIPConfig
 	if err := database.DB.First(&sip).Error; err == nil {

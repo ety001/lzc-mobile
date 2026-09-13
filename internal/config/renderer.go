@@ -18,7 +18,6 @@ type ConfigData struct {
 	RTPEndPort              int
 	AMIUsername             string
 	AMIPassword             string
-	AudioABProfile          string // A | B
 	Extensions              []ExtensionData
 	DongleBindings          []DongleBindingData
 	Dongles                 []DongleData
@@ -90,12 +89,6 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 	}
 	data.RTPStartPort = rtpConfig.StartPort
 	data.RTPEndPort = rtpConfig.EndPort
-
-	var globalCfg database.GlobalConfig
-	if err := database.DB.FirstOrCreate(&globalCfg, database.GlobalConfig{ID: 1}).Error; err != nil {
-		return nil, fmt.Errorf("failed to load global config: %w", err)
-	}
-	data.AudioABProfile = normalizeAudioABProfile(globalCfg.AudioABProfile)
 
 	// 从环境变量加载 AMI 配置
 	data.AMIUsername = os.Getenv("ASTERISK_AMI_USERNAME")
@@ -222,8 +215,8 @@ func (r *Renderer) RenderAll() error {
 		return fmt.Errorf("failed to render asterisk.conf: %w", err)
 	}
 
-	// 渲染 modules.conf（A/B：是否 noload bridge_native_rtp）
-	if err := r.RenderTemplate("modules.conf.tpl", "modules.conf", data); err != nil {
+	// 渲染 modules.conf（模块配置文件）
+	if err := r.RenderTemplate("modules.conf.tpl", "modules.conf", nil); err != nil {
 		return fmt.Errorf("failed to render modules.conf: %w", err)
 	}
 
@@ -237,7 +230,7 @@ func (r *Renderer) RenderAll() error {
 		return fmt.Errorf("failed to render logger.conf: %w", err)
 	}
 
-	// 渲染 rtp.conf（A=Alpine 默认 10000-20000；B=ingress 对齐端口）
+	// 渲染 rtp.conf（与懒猫 ingress / 数据库 RTP 端口一致）
 	if err := r.RenderTemplate("rtp.conf.tpl", "rtp.conf", data); err != nil {
 		return fmt.Errorf("failed to render rtp.conf: %w", err)
 	}
@@ -270,11 +263,4 @@ func (r *Renderer) RenderAll() error {
 	}
 
 	return nil
-}
-
-func normalizeAudioABProfile(v string) string {
-	if v == "B" || v == "b" {
-		return "B"
-	}
-	return "A"
 }

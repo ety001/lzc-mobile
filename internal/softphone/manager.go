@@ -47,8 +47,6 @@ type ControlMessage struct {
 	Extension  string `json:"extension,omitempty"`
 	Configured bool   `json:"configured,omitempty"`
 	CallState  string `json:"call_state,omitempty"`
-	// AudioABProfile mirrors GlobalConfig for Softphone A/B mic/media path.
-	AudioABProfile string `json:"audio_ab_profile,omitempty"`
 }
 
 // IncomingCallHook is invoked when the softphone UA receives an INVITE (optional).
@@ -107,8 +105,6 @@ type Manager struct {
 	activeEncoder io.Writer
 	activeDTMF    *diago.DTMFWriter
 	pcmIn         chan []byte // paced uplink frames (20ms PCM16)
-
-	audioABProfile string // A | B, set from GlobalConfig
 }
 
 type wsClient struct {
@@ -140,15 +136,11 @@ func (m *Manager) Status() ControlMessage {
 
 func (m *Manager) statusLocked() ControlMessage {
 	msg := ControlMessage{
-		Type:           MsgTypeStatus,
-		Configured:     m.extID != nil && m.username != "",
-		Registered:     m.registered.Load(),
-		Extension:      m.username,
-		CallState:      "idle",
-		AudioABProfile: m.audioABProfile,
-	}
-	if msg.AudioABProfile == "" {
-		msg.AudioABProfile = "A"
+		Type:       MsgTypeStatus,
+		Configured: m.extID != nil && m.username != "",
+		Registered: m.registered.Load(),
+		Extension:  m.username,
+		CallState:  "idle",
 	}
 	if m.call != nil {
 		msg.CallState = "in_call"
@@ -162,17 +154,6 @@ func (m *Manager) statusLocked() ControlMessage {
 		msg.From = m.ringingFrom
 	}
 	return msg
-}
-
-// SetAudioABProfile updates the Softphone-side A/B profile (A=legacy auto-mic path).
-func (m *Manager) SetAudioABProfile(profile string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if profile == "B" || profile == "b" {
-		m.audioABProfile = "B"
-	} else {
-		m.audioABProfile = "A"
-	}
 }
 
 func (m *Manager) clearRingingLocked() {

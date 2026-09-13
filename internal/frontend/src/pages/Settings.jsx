@@ -45,8 +45,6 @@ export default function Settings() {
   const [httpProxy, setHttpProxy] = useState("");
   const [dongleHealthEnabled, setDongleHealthEnabled] = useState(true);
   const [softphoneExtensionId, setSoftphoneExtensionId] = useState("");
-  const [audioABProfile, setAudioABProfile] = useState("A");
-  const [savingAudioAB, setSavingAudioAB] = useState(false);
   const [extensions, setExtensions] = useState([]);
 
   // 懒猫客户端通知设备（对齐 email-notify / 商店审核反馈）
@@ -166,7 +164,6 @@ export default function Settings() {
       setSoftphoneExtensionId(
         response.data.softphone_extension_id ? String(response.data.softphone_extension_id) : ""
       );
-      setAudioABProfile(response.data.audio_ab_profile === "B" ? "B" : "A");
     } catch (error) {
       toast.error("获取配置失败");
     } finally {
@@ -182,7 +179,6 @@ export default function Settings() {
         http_proxy: httpProxy,
         dongle_health_enabled: dongleHealthEnabled,
         softphone_extension_id: softphoneExtensionId ? Number(softphoneExtensionId) : null,
-        audio_ab_profile: audioABProfile,
       });
       toast.success("配置保存成功");
       try {
@@ -194,37 +190,6 @@ export default function Settings() {
       toast.error("保存失败", { description: error.response?.data?.error || error.message });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleAudioABChange = async (next) => {
-    const profile = next === "B" ? "B" : "A";
-    if (profile === audioABProfile) return;
-    setSavingAudioAB(true);
-    try {
-      const res = await settingsAPI.update({
-        http_proxy: httpProxy,
-        dongle_health_enabled: dongleHealthEnabled,
-        softphone_extension_id: softphoneExtensionId ? Number(softphoneExtensionId) : null,
-        audio_ab_profile: profile,
-      });
-      setAudioABProfile(profile);
-      if (res.data?.asterisk_restarted) {
-        toast.success(`已切换到音频方案 ${profile}，Asterisk 正在重启`);
-      } else {
-        toast.success(`已切换到音频方案 ${profile}`);
-      }
-      try {
-        await softphone.refreshStatus();
-      } catch {
-        /* ignore */
-      }
-    } catch (error) {
-      toast.error("切换音频方案失败", {
-        description: error.response?.data?.error || error.message,
-      });
-    } finally {
-      setSavingAudioAB(false);
     }
   };
 
@@ -381,56 +346,6 @@ export default function Settings() {
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-
-                    <div className="space-y-3 rounded-lg border p-4">
-                      <div className="font-medium">音频 A/B 对照测试</div>
-                      <p className="text-sm text-muted-foreground">
-                        对比 0.0.3 前能出声的组合（A）与后续实验栈（B）。切换会重写 Asterisk 配置并重启。
-                      </p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <button
-                          type="button"
-                          disabled={savingAudioAB}
-                          onClick={() => handleAudioABChange("A")}
-                          className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
-                            audioABProfile === "A"
-                              ? "border-primary bg-primary/5 ring-1 ring-primary"
-                              : "hover:bg-muted/60"
-                          }`}
-                        >
-                          <div className="font-medium">方案 A（基线）</div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Softphone 自动开麦（≈e59c917）+ Asterisk 宽 RTP 10000–20000，允许
-                            bridge_native_rtp（≈f55a267）
-                          </p>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingAudioAB}
-                          onClick={() => handleAudioABChange("B")}
-                          className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
-                            audioABProfile === "B"
-                              ? "border-primary bg-primary/5 ring-1 ring-primary"
-                              : "hover:bg-muted/60"
-                          }`}
-                        >
-                          <div className="font-medium">方案 B（当前实验）</div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            RTP 收窄到 ingress 段、noload bridge_native_rtp、media_use_received_transport
-                          </p>
-                        </button>
-                      </div>
-                      {savingAudioAB && (
-                        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          正在切换并重启 Asterisk…
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        当前生效：<span className="font-medium text-foreground">方案 {audioABProfile}</span>
-                        。建议先测 A；若 A 有声、B 无声，问题就在 B 的 RTP/bridge 改动。
-                      </p>
                     </div>
 
                     <Button type="submit" disabled={saving}>

@@ -1,15 +1,9 @@
 ;
-; RTP Configuration — Audio A/B profiles
-;   A: Alpine/default-like wide range (f55a267 era; host LAN can use full range)
-;   B: LazyCat ingress publish_port alignment (40890-40920 from DB)
+; RTP Configuration — must match LazyCat ingress publish_port (UDP)
+; and database rtp_configs. With network_mode: host, LAN clients can
+; also use these ports on the box IP.
 ;
 [general]
-{{if eq .AudioABProfile "B"}}
 rtpstart={{.RTPStartPort}}
 rtpend={{.RTPEndPort}}
 strictrtp=no
-{{else}}
-rtpstart=10000
-rtpend=20000
-strictrtp=yes
-{{end}}

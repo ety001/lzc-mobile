@@ -73,12 +73,8 @@ type GlobalConfig struct {
 	DongleHealthEnabled  bool      `gorm:"default:true" json:"dongle_health_enabled"`                   // Dongle 设备健康检查开关（默认开启）
 	SoftphoneExtensionID *uint     `json:"softphone_extension_id"`                                      // Web Softphone 使用的分机；nil/0=未配置则 Softphone 不可用
 	LazycatUID           string    `gorm:"type:varchar(255)" json:"lazycat_uid,omitempty"`              // 懒猫 X-HC-User-ID，用于客户端通知
-	// AudioABProfile A/B 媒体栈对照：
-	//   A = 0.0.3 发布前能出声的组合（Softphone≈e59c917 自动开麦 + Asterisk≈f55a267）
-	//   B = 当前实验栈（rtp.conf 收窄、noload bridge_native_rtp、media_use_received_transport）
-	AudioABProfile string    `gorm:"type:varchar(8);default:A" json:"audio_ab_profile"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // Extension SIP Extension 配置
