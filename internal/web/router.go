@@ -93,6 +93,9 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		{
 			settings.GET("", r.getGlobalConfig)
 			settings.PUT("", r.updateGlobalConfig)
+			settings.GET("/notify-devices", r.getNotifyDevicesSettings)
+			settings.PUT("/notify-devices", r.updateNotifyDevicesSettings)
+			settings.POST("/notify-devices/test", r.testNotifyDevices)
 		}
 
 		// SMS 管理
@@ -107,6 +110,14 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 
 		// WebSocket 终端
 		api.GET("/terminal/ws", r.handleTerminal)
+
+		// Softphone (443-only WSS)
+		softphoneGroup := api.Group("/softphone")
+		{
+			softphoneGroup.GET("/status", r.getSoftphoneStatus)
+			softphoneGroup.GET("/ws", r.handleSoftphoneWS)
+			softphoneGroup.GET("/spike/echo-ws", r.handleSoftphoneEchoWS)
+		}
 	}
 
 	// SPA 路由 fallback：所有未匹配的路由都返回 index.html

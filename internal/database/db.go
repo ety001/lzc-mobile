@@ -50,6 +50,11 @@ func Init() error {
 		// 不返回错误，因为可能索引已经不存在
 	}
 
+	// 对齐 RTP 端口到懒猫 ingress（40890-40920）
+	if err := migrateRTPPorts(DB); err != nil {
+		log.Printf("Warning: Failed to migrate RTP ports: %v", err)
+	}
+
 	log.Printf("Database initialized at %s", dbPath)
 	return nil
 }
@@ -73,10 +78,10 @@ func Seed() error {
 		return err
 	}
 
-	// 创建默认 RTP 配置
+	// 创建默认 RTP 配置（与懒猫 ingress publish_port 40890-40920 对齐）
 	rtpConfig := RTPConfig{
 		StartPort: 40890,
-		EndPort:   40900,
+		EndPort:   40920,
 	}
 	if err := DB.Create(&rtpConfig).Error; err != nil {
 		return err
@@ -158,5 +163,30 @@ func migrateDongleBindings(db *gorm.DB) error {
 		log.Printf("Found %d dongle_id values with multiple bindings, unique constraint should be removed", len(duplicates))
 	}
 
+	return nil
+}
+
+// migrateRTPPorts 将历史默认 RTP 范围扩到与懒猫 ingress 一致
+func migrateRTPPorts(db *gorm.DB) error {
+	var rtp RTPConfig
+	if err := db.First(&rtp).Error; err != nil {
+		return nil
+	}
+	changed := false
+	if rtp.StartPort == 0 {
+		rtp.StartPort = 40890
+		changed = true
+	}
+	if rtp.EndPort < 40920 {
+		rtp.EndPort = 40920
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	if err := db.Save(&rtp).Error; err != nil {
+		return err
+	}
+	log.Printf("Migrated RTP ports to %d-%d", rtp.StartPort, rtp.EndPort)
 	return nil
 }

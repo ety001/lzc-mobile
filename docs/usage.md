@@ -218,6 +218,41 @@ Dongle 管理用于配置 USB dongle（GSM Modem）与 Extension 的绑定关系
 2. 检查环境变量 `ASTERISK_AMI_USERNAME` 和 `ASTERISK_AMI_PASSWORD` 是否正确
 3. 查看容器日志了解详细错误信息
 
+## Web Softphone（浏览器软电话）
+
+浏览器 Softphone **不使用 WebRTC**。信令与语音全部走懒猫 HTTPS 的同源 WSS（443 隧道），由服务端 Go SIP UA 在本机向 Asterisk 注册并桥接 RTP。
+
+### 启用步骤
+
+1. 先在「Extension」中创建至少一个分机（可与 MizuDroid 共用同一分机，多 Contact）。
+2. 打开「设置 → 全局配置 → Web Softphone 分机」，**显式选择**一个 Extension 并保存。
+3. **未指定分机时 Softphone 不可用**（不会自动使用第一个分机）。
+4. 配置保存后，应用会**自动连接** Softphone WSS；切换页面不断开。
+5. 用顶栏 **电话图标** 打开拨号抽屉：拨号 / DTMF / 挂断 / 接听。关闭抽屉不会挂断。
+6. 「Softphone」页保留 Echo 探测与事件日志；也可从该页打开拨号盘。
+
+### 与 MizuDroid 的关系
+
+- MizuDroid 等原生客户端仍走 L4 SIP（UDP/TCP 5060）与 RTP 端口段。
+- Web Softphone 只走 `https://lzcmobile.<box>.heiyu.space` 的 WSS，不依赖 L4 媒体。
+
+### 验证 A（WSS Echo）
+
+Softphone 页提供 Echo 探测：测量 WSS PCM 回显单向延迟。建议在真实 `https://lzcmobile...` 下测试；通过标准参考 p95 `< 200ms`。
+
+### 媒体自测号码（Asterisk dialplan）
+
+在 Softphone 直接拨（**不要**加 `999` 外线前缀）：
+
+| 号码 | 作用 |
+|------|------|
+| `6000` | `Echo()`：能听到自己 = 双向媒体正常 |
+| `6001` | `Milliwatt()`：持续测试音 = 下行媒体正常 |
+
+配置位于 `configs/asterisk/extensions.conf.tpl` 的 `SOFTPHONE-TEST` 标记块；改动前请备份到 `configs/asterisk/backups/`。回滚：删除该标记块，或恢复对应 `.pre-softphone-test.bak`。
+
+通话中也可点「发送测试音」从浏览器注入 440Hz（不依赖麦克风）。
+
 ## 最佳实践
 
 1. **定期备份数据库**：数据库文件位于 `/var/lib/lzc-mobile/data.db`，建议定期备份
