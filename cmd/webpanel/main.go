@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -107,6 +108,11 @@ func main() {
 		time.Sleep(3 * time.Second)
 		web.ReloadSoftphone()
 	}()
+
+	// 懒猫客户端系统通知（来电推送）；网关晚启动时会后台重试
+	notifyCtx, notifyCancel := context.WithCancel(context.Background())
+	defer notifyCancel()
+	web.InitLZCNotify(notifyCtx)
 
 	// 获取端口
 	port := os.Getenv("WEB_PORT")

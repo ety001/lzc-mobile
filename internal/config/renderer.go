@@ -12,15 +12,16 @@ import (
 
 // ConfigData 配置模板数据
 type ConfigData struct {
-	SIPHost               string
-	SIPPort               int
-	RTPStartPort          int
-	RTPEndPort            int
-	AMIUsername           string
-	AMIPassword           string
-	Extensions            []ExtensionData
-	DongleBindings        []DongleBindingData
-	Dongles               []DongleData
+	SIPHost                 string
+	SIPPort                 int
+	RTPStartPort            int
+	RTPEndPort              int
+	AMIUsername             string
+	AMIPassword             string
+	AudioABProfile          string // A | B
+	Extensions              []ExtensionData
+	DongleBindings          []DongleBindingData
+	Dongles                 []DongleData
 	InboundBindingsByDongle map[string][]ExtensionData // 按 dongle ID 分组的 inbound 绑定
 }
 
@@ -89,6 +90,12 @@ func (r *Renderer) LoadConfigData() (*ConfigData, error) {
 	}
 	data.RTPStartPort = rtpConfig.StartPort
 	data.RTPEndPort = rtpConfig.EndPort
+
+	var globalCfg database.GlobalConfig
+	if err := database.DB.FirstOrCreate(&globalCfg, database.GlobalConfig{ID: 1}).Error; err != nil {
+		return nil, fmt.Errorf("failed to load global config: %w", err)
+	}
+	data.AudioABProfile = normalizeAudioABProfile(globalCfg.AudioABProfile)
 
 	// 从环境变量加载 AMI 配置
 	data.AMIUsername = os.Getenv("ASTERISK_AMI_USERNAME")
@@ -215,8 +222,8 @@ func (r *Renderer) RenderAll() error {
 		return fmt.Errorf("failed to render asterisk.conf: %w", err)
 	}
 
-	// 渲染 modules.conf（模块配置文件，不需要模板数据）
-	if err := r.RenderTemplate("modules.conf.tpl", "modules.conf", nil); err != nil {
+	// 渲染 modules.conf（A/B：是否 noload bridge_native_rtp）
+	if err := r.RenderTemplate("modules.conf.tpl", "modules.conf", data); err != nil {
 		return fmt.Errorf("failed to render modules.conf: %w", err)
 	}
 
@@ -228,6 +235,11 @@ func (r *Renderer) RenderAll() error {
 	// 渲染 logger.conf（日志轮转配置文件）
 	if err := r.RenderTemplate("logger.conf.tpl", "logger.conf", nil); err != nil {
 		return fmt.Errorf("failed to render logger.conf: %w", err)
+	}
+
+	// 渲染 rtp.conf（A=Alpine 默认 10000-20000；B=ingress 对齐端口）
+	if err := r.RenderTemplate("rtp.conf.tpl", "rtp.conf", data); err != nil {
+		return fmt.Errorf("failed to render rtp.conf: %w", err)
 	}
 
 	// 渲染 pjsip.conf（PJSIP 配置文件，需要 SIP 配置和 Extensions）
@@ -258,4 +270,11 @@ func (r *Renderer) RenderAll() error {
 	}
 
 	return nil
+}
+
+func normalizeAudioABProfile(v string) string {
+	if v == "B" || v == "b" {
+		return "B"
+	}
+	return "A"
 }

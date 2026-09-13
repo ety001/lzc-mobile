@@ -93,6 +93,9 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		{
 			settings.GET("", r.getGlobalConfig)
 			settings.PUT("", r.updateGlobalConfig)
+			settings.GET("/notify-devices", r.getNotifyDevicesSettings)
+			settings.PUT("/notify-devices", r.updateNotifyDevicesSettings)
+			settings.POST("/notify-devices/test", r.testNotifyDevices)
 		}
 
 		// SMS 管理

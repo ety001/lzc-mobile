@@ -6,6 +6,13 @@ preload => res_pjsip.so
 preload => res_pjsip_pubsub.so
 preload => res_pjsip_session.so
 
+{{if eq .AudioABProfile "B"}}
+; Profile B: Softphone(localhost) ↔ LAN SIP — disable native RTP bridge
+noload => bridge_native_rtp.so
+{{else}}
+; Profile A (0.0.3 baseline / f55a267): allow bridge_native_rtp.so (autoload)
+{{end}}
+
 ; Disable deprecated chan_sip
 noload => chan_sip.so
 

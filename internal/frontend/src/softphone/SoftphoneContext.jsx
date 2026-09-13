@@ -32,6 +32,9 @@ export function SoftphoneProvider({ children }) {
   const [micOn, setMicOn] = useState(false);
   const [logLines, setLogLines] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const ringingKeyRef = useRef(null);
+  const audioABProfileRef = useRef("A");
+  const [audioABProfile, setAudioABProfile] = useState("A");
 
   const pushLog = useCallback((line) => {
     setLogLines((prev) => [`${new Date().toLocaleTimeString()} ${line}`, ...prev].slice(0, 80));
@@ -53,24 +56,90 @@ export function SoftphoneProvider({ children }) {
     if (sdkRef.current) return sdkRef.current;
 
     const sdk = new SoftphoneSDK();
+    const beginIncomingUI = (msg, { toastNotify = true } = {}) => {
+      const key = msg.call_id || msg.from || "ring";
+      const already = ringingKeyRef.current === key;
+      ringingKeyRef.current = key;
+      setIncoming(msg);
+      setCallState("ringing");
+      setDrawerOpen(true);
+      if (already) return;
+      pushLog(`incoming from ${msg.from || "unknown"}`);
+      if (toastNotify) {
+        toast.message("来电", { description: msg.from || "未知号码" });
+      }
+      (async () => {
+        try {
+          await sdk.startRingtone();
+        } catch (e) {
+          pushLog(`ringtone failed: ${e.message || e}`);
+        }
+      })();
+      if (!toastNotify) return;
+      try {
+        if (typeof Notification !== "undefined") {
+          const show = () => {
+            const n = new Notification("懒猫通讯 · 来电", {
+              body: msg.from || "未知号码",
+              tag: `softphone-incoming-${msg.call_id || "call"}`,
+              renotify: true,
+            });
+            n.onclick = () => {
+              window.focus();
+              n.close();
+            };
+          };
+          if (Notification.permission === "granted") show();
+          else if (Notification.permission !== "denied") {
+            Notification.requestPermission().then((p) => {
+              if (p === "granted") show();
+            });
+          }
+        }
+      } catch (e) {
+        pushLog(`notification failed: ${e.message || e}`);
+      }
+    };
+
     sdk.on("status", (msg) => {
       if (typeof msg.configured === "boolean") setConfigured(msg.configured);
       if (typeof msg.registered === "boolean") setRegistered(msg.registered);
       if (msg.extension != null) setExtension(msg.extension || "");
       if (msg.call_state) setCallState(msg.call_state);
-      pushLog(`status registered=${msg.registered} ext=${msg.extension || "-"}`);
+      if (msg.audio_ab_profile === "A" || msg.audio_ab_profile === "B") {
+        audioABProfileRef.current = msg.audio_ab_profile;
+        setAudioABProfile(msg.audio_ab_profile);
+      }
+      // Deeplink / reconnect: status may already be ringing before any incoming event.
+      if (msg.call_state === "ringing" && (msg.from || msg.call_id)) {
+        beginIncomingUI(
+          { from: msg.from, call_id: msg.call_id },
+          { toastNotify: false }
+        );
+      }
+      pushLog(
+        `status registered=${msg.registered} ext=${msg.extension || "-"} call=${msg.call_state || "-"} ab=${msg.audio_ab_profile || "-"}`
+      );
     });
     sdk.on("incoming", (msg) => {
-      setIncoming(msg);
-      setCallState("ringing");
-      setDrawerOpen(true);
-      pushLog(`incoming from ${msg.from}`);
-      toast.message("来电", { description: msg.from || "未知号码" });
+      beginIncomingUI(msg, { toastNotify: true });
     });
     sdk.on("call_state", (msg) => {
       const next = msg.state || "idle";
       setCallState(next === "ended" ? "idle" : next);
-      if (msg.state === "ended") setIncoming(null);
+      if (msg.state === "ringing") {
+        beginIncomingUI(
+          { from: msg.from, call_id: msg.call_id },
+          { toastNotify: false }
+        );
+      }
+      if (msg.state === "ended" || msg.state === "answered" || msg.state === "dialing") {
+        sdk.stopRingtone();
+      }
+      if (msg.state === "ended") {
+        ringingKeyRef.current = null;
+        setIncoming(null);
+      }
       pushLog(`call_state ${msg.state}${msg.reason ? ` (${msg.reason})` : ""}`);
     });
     sdk.on("error", (msg) => {
@@ -133,6 +202,14 @@ export function SoftphoneProvider({ children }) {
       setRegistered(!!data.registered);
       setExtension(data.extension || "");
       if (data.call_state) setCallState(data.call_state);
+      if (data.audio_ab_profile === "A" || data.audio_ab_profile === "B") {
+        audioABProfileRef.current = data.audio_ab_profile;
+        setAudioABProfile(data.audio_ab_profile);
+      }
+      if (data.call_state === "ringing" && (data.from || data.call_id)) {
+        setIncoming({ from: data.from, call_id: data.call_id });
+        setDrawerOpen(true);
+      }
 
       if (nextConfigured && !prevConfigured) {
         await connectInternal();
@@ -164,6 +241,14 @@ export function SoftphoneProvider({ children }) {
         setRegistered(!!data.registered);
         setExtension(data.extension || "");
         if (data.call_state) setCallState(data.call_state);
+        if (data.audio_ab_profile === "A" || data.audio_ab_profile === "B") {
+          audioABProfileRef.current = data.audio_ab_profile;
+          setAudioABProfile(data.audio_ab_profile);
+        }
+        if (data.call_state === "ringing" && (data.from || data.call_id)) {
+          setIncoming({ from: data.from, call_id: data.call_id });
+          setDrawerOpen(true);
+        }
         if (nextConfigured) {
           await connectInternal();
         }
@@ -216,6 +301,17 @@ export function SoftphoneProvider({ children }) {
     [disableMic, enableMic]
   );
 
+  const armMediaForCall = useCallback(async (sdk) => {
+    const profile = audioABProfileRef.current === "B" ? "B" : "A";
+    if (profile === "A") {
+      await sdk.startMedia();
+    } else {
+      await sdk.enableMic();
+    }
+    setMicOn(true);
+    pushLog(`media armed profile=${profile}`);
+  }, [pushLog]);
+
   const call = useCallback(
     async (num) => {
       const target = (num ?? number).trim();
@@ -230,7 +326,7 @@ export function SoftphoneProvider({ children }) {
       try {
         const sdk = ensureSDK();
         if (!connected) await connectInternal();
-        await sdk.ensurePlayback();
+        await armMediaForCall(sdk);
         sdk.call(target);
         setCallState("dialing");
         pushLog(`call ${target}`);
@@ -238,21 +334,22 @@ export function SoftphoneProvider({ children }) {
         toast.error("呼叫失败", { description: e.message || String(e) });
       }
     },
-    [connectInternal, connected, ensureSDK, number, pushLog]
+    [armMediaForCall, connectInternal, connected, ensureSDK, number, pushLog]
   );
 
   const answer = useCallback(async () => {
     try {
       const sdk = ensureSDK();
       if (!connected) await connectInternal();
-      await sdk.ensurePlayback();
+      sdk.stopRingtone();
+      await armMediaForCall(sdk);
       sdk.answer();
       setIncoming(null);
       pushLog("answer sent");
     } catch (e) {
       toast.error("接听失败", { description: e.message || String(e) });
     }
-  }, [connectInternal, connected, ensureSDK, pushLog]);
+  }, [armMediaForCall, connectInternal, connected, ensureSDK, pushLog]);
 
   const hangup = useCallback(async () => {
     if (callState === "idle" && !incoming) return;
@@ -261,13 +358,16 @@ export function SoftphoneProvider({ children }) {
       if (sdk.ws?.readyState !== WebSocket.OPEN) {
         await connectInternal();
       }
+      sdk.stopRingtone();
       setCallState("idle");
       setIncoming(null);
+      ringingKeyRef.current = null;
       sdk.hangup();
       pushLog("hangup sent");
     } catch (e) {
       setCallState("idle");
       setIncoming(null);
+      ringingKeyRef.current = null;
       toast.error("挂断失败", { description: e.message || String(e) });
     }
   }, [callState, connectInternal, ensureSDK, incoming, pushLog]);
@@ -325,6 +425,7 @@ export function SoftphoneProvider({ children }) {
       micOn,
       logLines,
       drawerOpen,
+      audioABProfile,
       openDrawer,
       closeDrawer,
       setDrawerOpen,
@@ -345,6 +446,7 @@ export function SoftphoneProvider({ children }) {
     }),
     [
       answer,
+      audioABProfile,
       call,
       callState,
       closeDrawer,

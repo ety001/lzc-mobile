@@ -1,5 +1,5 @@
 import { encodeFrame, decodeFrame, CODEC_PCM16_8K } from "./frame";
-import { SoftphoneAudio } from "./audio";
+import { SoftphoneAudio, pcm16ToLEBytes } from "./audio";
 
 function softphoneWsURL(path = "/api/v1/softphone/ws") {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -76,6 +76,12 @@ export class SoftphoneSDK {
     await this.audio.enableMic();
   }
 
+  /** Profile A: e59c917-style mic+playback start. */
+  async startMedia() {
+    if (!this.audio) throw new Error("not connected");
+    await this.audio.start();
+  }
+
   disableMic() {
     this.audio?.disableMic();
   }
@@ -84,6 +90,15 @@ export class SoftphoneSDK {
   async ensurePlayback() {
     if (!this.audio) throw new Error("not connected");
     await this.audio.ensurePlayback();
+  }
+
+  async startRingtone() {
+    if (!this.audio) throw new Error("not connected");
+    await this.audio.startRingtone();
+  }
+
+  stopRingtone() {
+    this.audio?.stopRingtone();
   }
 
   disconnect() {
@@ -160,7 +175,9 @@ export class SoftphoneSDK {
   #sendPcm(pcm16) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.seq = (this.seq + 1) >>> 0;
-    const frame = encodeFrame(this.seq, Date.now() >>> 0, CODEC_PCM16_8K, pcm16);
+    // Always serialize LE bytes explicitly — Int16Array.buffer endianness varies by platform.
+    const payload = pcm16 instanceof Uint8Array ? pcm16 : pcm16ToLEBytes(pcm16);
+    const frame = encodeFrame(this.seq, Date.now() >>> 0, CODEC_PCM16_8K, payload);
     this.ws.send(frame);
   }
 

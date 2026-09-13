@@ -10,13 +10,17 @@ export const PCM_FRAME_SAMPLES = 160; // 20ms @ 8kHz
 export const PCM_FRAME_BYTES = PCM_FRAME_SAMPLES * 2;
 
 export function encodeFrame(seq, tsMs, codec, payload) {
-  const out = new Uint8Array(HEADER_SIZE + payload.byteLength);
+  const bytes =
+    payload instanceof Uint8Array
+      ? payload
+      : new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
+  const out = new Uint8Array(HEADER_SIZE + bytes.byteLength);
   const view = new DataView(out.buffer);
   out[0] = FRAME_VERSION;
   view.setUint32(1, seq >>> 0);
   view.setUint32(5, tsMs >>> 0);
   out[9] = codec;
-  out.set(new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength), HEADER_SIZE);
+  out.set(bytes, HEADER_SIZE);
   return out;
 }
 

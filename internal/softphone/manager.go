@@ -47,7 +47,13 @@ type ControlMessage struct {
 	Extension  string `json:"extension,omitempty"`
 	Configured bool   `json:"configured,omitempty"`
 	CallState  string `json:"call_state,omitempty"`
+	// AudioABProfile mirrors GlobalConfig for Softphone A/B mic/media path.
+	AudioABProfile string `json:"audio_ab_profile,omitempty"`
 }
+
+// IncomingCallHook is invoked when the softphone UA receives an INVITE (optional).
+// Used by the web layer to push LazyCat client notifications.
+var IncomingCallHook func(from string)
 
 type dialogMedia interface {
 	AudioReader(opts ...diago.AudioReaderOption) (io.Reader, error)
@@ -88,12 +94,21 @@ type Manager struct {
 	call       *callHandle
 	dialCancel context.CancelFunc // cancels in-flight Invite when Hangup mid-dial
 
+	// Pending inbound ring (before answer). Replayed to newly attached WS clients
+	// so LazyCat notification deeplink can still show Answer UI.
+	ringing      bool
+	ringingFrom  string
+	ringingCallID string
+
 	clients map[*wsClient]struct{}
 
 	answerCh      chan struct{}
 	rejectCh      chan struct{}
 	activeEncoder io.Writer
 	activeDTMF    *diago.DTMFWriter
+	pcmIn         chan []byte // paced uplink frames (20ms PCM16)
+
+	audioABProfile string // A | B, set from GlobalConfig
 }
 
 type wsClient struct {
@@ -110,6 +125,7 @@ var globalManager = &Manager{
 	clients:  make(map[*wsClient]struct{}),
 	answerCh: make(chan struct{}, 1),
 	rejectCh: make(chan struct{}, 1),
+	pcmIn:    make(chan []byte, 50),
 }
 
 func GetManager() *Manager {
@@ -119,18 +135,50 @@ func GetManager() *Manager {
 func (m *Manager) Status() ControlMessage {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.statusLocked()
+}
+
+func (m *Manager) statusLocked() ControlMessage {
 	msg := ControlMessage{
-		Type:       MsgTypeStatus,
-		Configured: m.extID != nil && m.username != "",
-		Registered: m.registered.Load(),
-		Extension:  m.username,
-		CallState:  "idle",
+		Type:           MsgTypeStatus,
+		Configured:     m.extID != nil && m.username != "",
+		Registered:     m.registered.Load(),
+		Extension:      m.username,
+		CallState:      "idle",
+		AudioABProfile: m.audioABProfile,
+	}
+	if msg.AudioABProfile == "" {
+		msg.AudioABProfile = "A"
 	}
 	if m.call != nil {
 		msg.CallState = "in_call"
 		msg.CallID = m.call.id
+		if m.call.from != "" {
+			msg.From = m.call.from
+		}
+	} else if m.ringing {
+		msg.CallState = "ringing"
+		msg.CallID = m.ringingCallID
+		msg.From = m.ringingFrom
 	}
 	return msg
+}
+
+// SetAudioABProfile updates the Softphone-side A/B profile (A=legacy auto-mic path).
+func (m *Manager) SetAudioABProfile(profile string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if profile == "B" || profile == "b" {
+		m.audioABProfile = "B"
+	} else {
+		m.audioABProfile = "A"
+	}
+}
+
+func (m *Manager) clearRingingLocked() {
+	m.ringing = false
+	m.ringingFrom = ""
+	m.ringingCallID = ""
 }
 
 // ConfigureAndStart loads extension credentials and (re)starts the UA.
@@ -323,26 +371,14 @@ func udpBindAvailable(host string, port int) bool {
 	return true
 }
 
-func (m *Manager) statusLocked() ControlMessage {
-	msg := ControlMessage{
-		Type:       MsgTypeStatus,
-		Configured: m.extID != nil && m.username != "",
-		Registered: m.registered.Load(),
-		Extension:  m.username,
-		CallState:  "idle",
-	}
-	if m.call != nil {
-		msg.CallState = "in_call"
-		msg.CallID = m.call.id
-	}
-	return msg
-}
-
 func (m *Manager) callState() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.call != nil {
 		return "in_call"
+	}
+	if m.ringing {
+		return "ringing"
 	}
 	return "idle"
 }
@@ -380,9 +416,17 @@ func (m *Manager) AttachClient(conn *websocket.Conn) *wsClient {
 	m.mu.Lock()
 	m.clients[c] = struct{}{}
 	status := m.statusLocked()
+	ringing := m.ringing
+	from := m.ringingFrom
+	callID := m.ringingCallID
 	m.mu.Unlock()
-	data, _ := json.Marshal(status)
-	c.writeText(data)
+
+	c.writeText(mustJSON(status))
+	// Replay ringing so a freshly opened LazyCat client WebView can answer.
+	if ringing {
+		c.writeText(mustJSON(ControlMessage{Type: MsgTypeIncoming, From: from, CallID: callID}))
+		c.writeText(mustJSON(ControlMessage{Type: MsgTypeCallState, State: "ringing", CallID: callID, From: from}))
+	}
 	return c
 }
 
@@ -616,8 +660,17 @@ func (m *Manager) handleInbound(inDialog *diago.DialogServerSession) {
 	default:
 	}
 
+	m.mu.Lock()
+	m.ringing = true
+	m.ringingFrom = from
+	m.ringingCallID = callID
+	m.mu.Unlock()
+
 	m.Broadcast(ControlMessage{Type: MsgTypeIncoming, From: from, CallID: callID})
 	m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ringing", CallID: callID, From: from})
+	if IncomingCallHook != nil {
+		go IncomingCallHook(from)
+	}
 
 	timer := time.NewTimer(45 * time.Second)
 	defer timer.Stop()
@@ -626,19 +679,31 @@ func (m *Manager) handleInbound(inDialog *diago.DialogServerSession) {
 	case <-m.answerCh:
 		// continue
 	case <-m.rejectCh:
+		m.mu.Lock()
+		m.clearRingingLocked()
+		m.mu.Unlock()
 		_ = inDialog.Respond(sip.StatusBusyHere, "Busy Here", nil)
 		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", CallID: callID, Reason: "rejected"})
 		return
 	case <-timer.C:
+		m.mu.Lock()
+		m.clearRingingLocked()
+		m.mu.Unlock()
 		_ = inDialog.Respond(sip.StatusRequestTimeout, "Request Timeout", nil)
 		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", CallID: callID, Reason: "timeout"})
 		return
 	case <-inDialog.Context().Done():
+		m.mu.Lock()
+		m.clearRingingLocked()
+		m.mu.Unlock()
 		m.Broadcast(ControlMessage{Type: MsgTypeCallState, State: "ended", CallID: callID, Reason: "cancelled"})
 		return
 	}
 
 	if err := inDialog.Answer(); err != nil {
+		m.mu.Lock()
+		m.clearRingingLocked()
+		m.mu.Unlock()
 		m.Broadcast(ControlMessage{Type: MsgTypeError, Message: "answer failed: " + err.Error()})
 		return
 	}
@@ -654,6 +719,7 @@ func (m *Manager) handleInbound(inDialog *diago.DialogServerSession) {
 	}
 
 	m.mu.Lock()
+	m.clearRingingLocked()
 	if m.call != nil {
 		m.mu.Unlock()
 		_ = inDialog.Hangup(context.Background())
@@ -703,12 +769,23 @@ func (m *Manager) runMediaBridge(ctx context.Context, call *callHandle) {
 
 	var seq atomic.Uint32
 	go m.rtpToClients(ctx, dec, &seq)
-	// uplink from clients is handled in WS read loop via PushPCM
 
 	m.mu.Lock()
 	m.activeEncoder = enc
 	m.activeDTMF = &dtmfWriter
 	m.mu.Unlock()
+
+	// Drain stale uplink frames from a previous call.
+	for {
+		select {
+		case <-m.pcmIn:
+		default:
+			goto drained
+		}
+	}
+drained:
+	// diago RTPPacketWriter.Write blocks ~20ms/frame; keep it off the WS read loop.
+	go m.pcmUplinkLoop(ctx, enc)
 
 	<-ctx.Done()
 
@@ -716,6 +793,56 @@ func (m *Manager) runMediaBridge(ctx context.Context, call *callHandle) {
 	m.activeEncoder = nil
 	m.activeDTMF = nil
 	m.mu.Unlock()
+}
+
+func (m *Manager) pcmUplinkLoop(ctx context.Context, enc io.Writer) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case frame := <-m.pcmIn:
+			if enc == nil || len(frame) == 0 {
+				continue
+			}
+			if len(frame) > PCMFrameBytes {
+				frame = frame[:PCMFrameBytes]
+			} else if len(frame) < PCMFrameBytes {
+				padded := make([]byte, PCMFrameBytes)
+				copy(padded, frame)
+				frame = padded
+			}
+			if _, err := enc.Write(frame); err != nil && !errors.Is(err, context.Canceled) {
+				log.Printf("[softphone] uplink write: %v", err)
+				return
+			}
+		}
+	}
+}
+
+// PushPCM queues one PCM16LE frame from a browser client (non-blocking).
+func (m *Manager) PushPCM(payload []byte) {
+	if len(payload) == 0 {
+		return
+	}
+	m.mu.Lock()
+	active := m.activeEncoder != nil
+	m.mu.Unlock()
+	if !active {
+		return
+	}
+	frame := append([]byte(nil), payload...)
+	select {
+	case m.pcmIn <- frame:
+	default:
+		select {
+		case <-m.pcmIn:
+		default:
+		}
+		select {
+		case m.pcmIn <- frame:
+		default:
+		}
+	}
 }
 
 // SendDTMF sends one DTMF digit on the active call (RFC2833 + AMI PlayDTMF fallback).
@@ -763,17 +890,6 @@ func isDTMFDigit(b byte) bool {
 	default:
 		return false
 	}
-}
-
-// PushPCM writes one PCM16 frame from a browser client into the active call.
-func (m *Manager) PushPCM(payload []byte) {
-	m.mu.Lock()
-	enc := m.activeEncoder
-	m.mu.Unlock()
-	if enc == nil || len(payload) == 0 {
-		return
-	}
-	_, _ = enc.Write(payload)
 }
 
 func (m *Manager) rtpToClients(ctx context.Context, dec *audio.PCMDecoderReader, seq *atomic.Uint32) {
