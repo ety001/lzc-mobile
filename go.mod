@@ -2,6 +2,8 @@ module github.com/ety001/lzc-mobile
 
 go 1.25.5
 
+toolchain go1.27.3
+
 require (
 	gitee.com/linakesi/lzc-sdk v0.1.1-0.20260720072851-56a9b456a673
 	github.com/creack/pty v1.1.24
